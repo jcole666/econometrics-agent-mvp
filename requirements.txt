@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pandas
+openpyxl
+statsmodels
+linearmodels
+python-multipart
+pydantic
+
