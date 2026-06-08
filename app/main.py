@@ -113,59 +113,101 @@ CHINESE_DEMO_HTML = """
   <style>
     :root {
       color-scheme: light;
-      --bg: #f6f8fb;
-      --panel: #ffffff;
-      --ink: #172033;
-      --muted: #667085;
-      --line: #d9e2ec;
-      --blue: #2563eb;
-      --blue-dark: #1e40af;
-      --green: #087f5b;
-      --code: #111827;
+      --bg: #f5f4ef;
+      --surface: #ffffff;
+      --surface-soft: #faf9f5;
+      --ink: #202124;
+      --muted: #646a70;
+      --line: #dedbd2;
+      --line-strong: #b8b2a4;
+      --accent: #245b4f;
+      --accent-dark: #173f37;
+      --accent-soft: #eef4f1;
+      --mark: #7a3e1d;
+      --code: #1f2224;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
+      min-height: 100vh;
       background: var(--bg);
       color: var(--ink);
-      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
       line-height: 1.55;
     }
     header {
-      background: #ffffff;
-      border-bottom: 1px solid var(--line);
-      padding: 24px 32px;
+      border-bottom: 1px solid var(--line-strong);
+      background: var(--surface);
+    }
+    .header-inner {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 18px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: end;
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
     }
     header h1 {
       margin: 0 0 6px;
-      font-size: 26px;
+      font-size: 28px;
       letter-spacing: 0;
     }
     header p {
       margin: 0;
       color: var(--muted);
-      font-size: 14px;
+      font-size: 13px;
     }
     main {
       width: min(1180px, calc(100vw - 32px));
-      margin: 22px auto 40px;
+      margin: 18px auto 42px;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      align-items: start;
+      gap: 14px;
+      align-items: stretch;
     }
     section {
-      background: var(--panel);
+      background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 20px;
-      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+      border-radius: 6px;
+      padding: 18px;
+      box-shadow: none;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    section::before {
+      display: none;
     }
     section.full { grid-column: 1 / -1; }
+    section.full { overflow-x: auto; }
     h2 {
-      margin: 0 0 14px;
-      font-size: 18px;
+      margin: 0 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 17px;
       letter-spacing: 0;
+    }
+    .step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 24px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      color: var(--accent-dark);
+      background: var(--surface-soft);
+      font-size: 12px;
+      font-weight: 800;
     }
     label {
       display: block;
@@ -175,12 +217,18 @@ CHINESE_DEMO_HTML = """
     }
     input, textarea {
       width: 100%;
-      border: 1px solid #cbd5e1;
+      border: 1px solid #cbc8bf;
       border-radius: 6px;
       padding: 10px 12px;
       font: inherit;
-      background: #ffffff;
+      background: var(--surface);
       color: var(--ink);
+      transition: border-color 0.16s ease, background 0.16s ease;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: #ffffff;
     }
     input[type="file"] {
       position: absolute;
@@ -193,63 +241,104 @@ CHINESE_DEMO_HTML = """
       min-height: 76px;
       resize: vertical;
     }
-    button {
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
       margin-top: 14px;
+    }
+    button {
       border: 0;
       border-radius: 6px;
-      background: var(--blue);
+      background: var(--accent);
       color: white;
       padding: 10px 14px;
       font-weight: 700;
       cursor: pointer;
+      transition: background 0.16s ease;
     }
-    button:hover { background: var(--blue-dark); }
+    button:hover {
+      background: var(--accent-dark);
+    }
     button.secondary {
-      background: #e2e8f0;
+      background: var(--surface-soft);
       color: var(--ink);
-      margin-left: 8px;
+      border: 1px solid var(--line);
     }
-    button.secondary:hover { background: #cbd5e1; }
+    button.secondary:hover { background: #edeae2; }
+    .upload-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
     .file-label {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       min-height: 40px;
-      border: 1px solid #cbd5e1;
+      border: 1px dashed var(--line-strong);
       border-radius: 6px;
-      background: #ffffff;
+      background: var(--surface);
       color: var(--ink);
       padding: 9px 12px;
       font-weight: 700;
       cursor: pointer;
+      transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
     }
-    .file-label:hover { border-color: var(--blue); color: var(--blue); }
+    .file-label:hover {
+      border-color: var(--accent);
+      color: var(--accent-dark);
+      background: var(--accent-soft);
+    }
     .file-name {
       display: inline-block;
-      margin-left: 10px;
       color: var(--muted);
       font-size: 13px;
+      max-width: 100%;
+      overflow-wrap: anywhere;
     }
     .hint {
       color: var(--muted);
       font-size: 13px;
-      margin-top: 8px;
+      margin: 10px 0 0;
     }
     .result {
       margin-top: 14px;
       border: 1px solid var(--line);
       border-radius: 6px;
-      background: #f8fafc;
+      background: var(--surface-soft);
       padding: 12px;
-      min-height: 80px;
+      min-height: 98px;
       white-space: pre-wrap;
       overflow: auto;
     }
+    main > section:not(.full) .result {
+      flex: 1 1 auto;
+    }
+    .result.is-loading {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
     .model-name {
       display: inline-block;
-      color: var(--green);
+      color: var(--accent-dark);
       font-weight: 800;
       margin-bottom: 8px;
+    }
+    .source-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      margin: 0 0 8px 8px;
+      padding: 2px 8px;
+      border: 1px solid #b9c9c3;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 800;
     }
     pre {
       background: var(--code);
@@ -260,62 +349,153 @@ CHINESE_DEMO_HTML = """
       white-space: pre-wrap;
       margin: 10px 0 0;
       font-size: 13px;
+      line-height: 1.55;
     }
     table {
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       margin-top: 10px;
       font-size: 13px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 6px;
     }
     th, td {
-      border: 1px solid var(--line);
-      padding: 8px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      padding: 9px 10px;
       text-align: left;
       vertical-align: top;
     }
-    th { background: #f1f5f9; }
+    tr:last-child td { border-bottom: 0; }
+    th {
+      background: #efede6;
+      color: #33322f;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    tbody tr:nth-child(even) td { background: var(--surface-soft); }
     .links {
       display: flex;
-      gap: 12px;
-      margin-top: 12px;
+      gap: 8px;
       flex-wrap: wrap;
+      justify-content: flex-end;
     }
     .links a {
-      color: var(--blue);
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      padding: 6px 10px;
+      background: var(--surface);
+      color: var(--ink);
       text-decoration: none;
-      font-weight: 600;
+      font-size: 13px;
+      font-weight: 700;
+      transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
     }
+    .links a:hover {
+      border-color: var(--accent);
+      color: var(--accent-dark);
+      background: var(--accent-soft);
+    }
+    .model-table td:nth-child(2) {
+      width: 150px;
+      color: var(--mark);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .model-table { min-width: 680px; }
     @media (max-width: 860px) {
       main { grid-template-columns: 1fr; }
-      header { padding: 20px 16px; }
+      .header-inner {
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+      .links { justify-content: flex-start; }
+    }
+    @media (max-width: 560px) {
+      .header-inner, main {
+        width: min(100vw - 20px, 1180px);
+      }
+      header h1 { font-size: 23px; }
+      section { padding: 14px; }
+      .actions button { width: 100%; }
+      .file-label { width: 100%; }
+      .model-table {
+        min-width: 0;
+        border: 0;
+        border-radius: 0;
+      }
+      .model-table thead { display: none; }
+      .model-table, .model-table tbody, .model-table tr, .model-table td {
+        display: block;
+        width: 100%;
+      }
+      .model-table tr {
+        margin-bottom: 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .model-table td {
+        display: grid;
+        grid-template-columns: 76px 1fr;
+        gap: 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      .model-table td::before {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .model-table td:nth-child(1)::before { content: "场景"; }
+      .model-table td:nth-child(2)::before { content: "模型"; }
+      .model-table td:nth-child(3)::before { content: "检查"; }
+      .model-table td:nth-child(2) {
+        width: 100%;
+        white-space: normal;
+      }
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>计量建模 Agent MVP</h1>
-    <p>上传表格数据，输入研究问题，自动推荐计量模型并生成 Python 代码模板。</p>
-    <div class="links">
-      <a href="/api-docs">接口文档</a>
-      <a href="/health">健康检查</a>
-      <a href="/maas-status">MaaS 状态</a>
+    <div class="header-inner">
+      <div>
+        <p class="eyebrow">Econometrics Research Console · Huawei MaaS</p>
+        <h1>计量建模 Agent MVP</h1>
+        <p>数据字段识别、模型推荐、Python 模板生成</p>
+      </div>
+      <div class="links">
+        <a href="/api-docs">接口文档</a>
+        <a href="/health">健康检查</a>
+        <a href="/maas-status">MaaS 状态</a>
+      </div>
     </div>
   </header>
 
   <main>
     <section>
-      <h2>一、上传数据并识别字段</h2>
-      <label class="file-label" for="fileInput">选择数据文件</label>
-      <span id="fileName" class="file-name">尚未选择文件</span>
+      <h2><span class="step">01</span>上传数据并识别字段</h2>
+      <div class="upload-row">
+        <label class="file-label" for="fileInput">选择数据文件</label>
+        <span id="fileName" class="file-name">尚未选择文件</span>
+      </div>
       <input id="fileInput" type="file" accept=".csv,.xlsx,.xls" onchange="showFileName()" />
-      <button onclick="profileData()">识别数据字段</button>
-      <button class="secondary" onclick="loadSampleData()">加载示例数据</button>
-      <p class="hint">支持 CSV / Excel。系统会返回字段类型、缺失值、唯一值和样例值。</p>
+      <div class="actions">
+        <button onclick="profileData()">识别数据字段</button>
+        <button class="secondary" onclick="loadSampleData()">加载示例数据</button>
+      </div>
+      <p class="hint">CSV / Excel · 字段类型 · 缺失值 · 样例值</p>
       <div id="profileResult" class="result">等待上传数据...</div>
     </section>
 
     <section>
-      <h2>二、输入研究问题并推荐模型</h2>
+      <h2><span class="step">02</span>输入研究问题并推荐模型</h2>
       <label for="question">研究问题</label>
       <textarea id="question">教育水平和工作经验是否影响收入</textarea>
 
@@ -328,13 +508,15 @@ CHINESE_DEMO_HTML = """
       <label for="xs">解释变量 X（英文逗号分隔）</label>
       <input id="xs" value="education, experience, gender" />
 
-      <button onclick="recommendModel()">推荐模型并生成代码</button>
+      <div class="actions">
+        <button onclick="recommendModel()">推荐模型并生成代码</button>
+      </div>
       <div id="recommendResult" class="result">等待输入研究问题...</div>
     </section>
 
     <section class="full">
-      <h2>三、Demo 可展示的模型类型</h2>
-      <table>
+      <h2><span class="step">03</span>Demo 可展示的模型类型</h2>
+      <table class="model-table">
         <thead>
           <tr><th>研究场景</th><th>推荐模型</th><th>需要检查的内容</th></tr>
         </thead>
@@ -383,6 +565,7 @@ CHINESE_DEMO_HTML = """
       }
       const form = new FormData();
       form.append("file", file);
+      box.classList.add("is-loading");
       box.textContent = "正在识别数据字段...";
       try {
         const response = await fetch("/profile-data", { method: "POST", body: form });
@@ -391,6 +574,8 @@ CHINESE_DEMO_HTML = """
         renderProfileResult(data);
       } catch (error) {
         box.textContent = "识别失败：" + error.message;
+      } finally {
+        box.classList.remove("is-loading");
       }
     }
 
@@ -401,6 +586,7 @@ CHINESE_DEMO_HTML = """
       document.getElementById("columns").value = "income, education, experience, gender";
       document.getElementById("y").value = "income";
       document.getElementById("xs").value = "education, experience, gender";
+      box.classList.add("is-loading");
       box.textContent = "正在加载示例数据...";
       try {
         const response = await fetch("/sample-profile");
@@ -409,6 +595,8 @@ CHINESE_DEMO_HTML = """
         renderProfileResult(data);
       } catch (error) {
         box.textContent = "加载示例失败：" + error.message;
+      } finally {
+        box.classList.remove("is-loading");
       }
     }
 
@@ -420,6 +608,7 @@ CHINESE_DEMO_HTML = """
         dependent_variable: document.getElementById("y").value || null,
         independent_variables: splitValues(document.getElementById("xs").value)
       };
+      box.classList.add("is-loading");
       box.textContent = "正在推荐模型...";
       try {
         const response = await fetch("/recommend-model", {
@@ -433,7 +622,7 @@ CHINESE_DEMO_HTML = """
         const note = data.llm_explanation || data.maas_error || "";
         box.innerHTML = `
           <span class="model-name">推荐模型：${data.model}</span>
-          <div><strong>推荐来源：</strong>${source}</div>
+          <span class="source-badge">${source}</span>
           <div><strong>推荐理由：</strong>${data.reason}</div>
           ${note ? `<div><strong>补充说明：</strong>${note}</div>` : ""}
           <div><strong>建模前检查：</strong></div>
@@ -443,6 +632,8 @@ CHINESE_DEMO_HTML = """
         `;
       } catch (error) {
         box.textContent = "推荐失败：" + error.message;
+      } finally {
+        box.classList.remove("is-loading");
       }
     }
 
