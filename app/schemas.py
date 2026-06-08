@@ -34,3 +34,7 @@ class ModelRecommendation(BaseModel):
     reason: str = Field(..., description="推荐该模型的理由")
     required_checks: list[str] = Field(..., description="建模前需要检查的事项")
     generated_code: str = Field(..., description="自动生成的 Python 代码模板")
+    provider: str = Field("rules", description="推荐来源：rules 或 huawei_maas")
+    maas_used: bool = Field(False, description="本次推荐是否成功调用华为云 MaaS")
+    maas_error: str | None = Field(None, description="MaaS 未启用或调用失败时的提示")
+    llm_explanation: str | None = Field(None, description="MaaS 返回的补充说明")

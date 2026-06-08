@@ -6,14 +6,16 @@ from app.schemas import ModelRequest
 def select_model(request: ModelRequest) -> tuple[str, str, list[str]]:
     text = request.research_question.lower()
 
-    if has_any(text, ["rdd", "断点", "断点回归", "阈值", "分数线"]):
+    if request.running_variable or has_any(text, ["rdd", "断点", "断点回归", "阈值", "分数线"]):
         return (
             "RDD",
             "需求中出现断点回归或阈值相关线索，适合先检查断点变量和 cutoff 设置。",
             ["确认 running variable", "确认 cutoff 阈值", "检查断点两侧样本量", "选择带宽和多项式阶数"],
         )
 
-    if has_any(text, ["did", "双重差分", "政策", "实施前后", "处理组", "对照组"]):
+    if (request.treatment_column and request.time_column) or has_any(
+        text, ["did", "双重差分", "政策", "实施前后", "处理组", "对照组"]
+    ):
         return (
             "DID",
             "需求中出现政策评估、处理组/对照组或政策前后比较线索，适合优先考虑 DID。",

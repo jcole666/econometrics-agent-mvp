@@ -25,6 +25,8 @@
         ↓
 模型选择规则引擎
         ↓
+华为云 MaaS 增强推荐（可选，失败自动回退）
+        ↓
 代码模板生成器
         ↓
 模型执行与结果解释
@@ -48,10 +50,27 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+如需启用华为云 MaaS，请复制 `.env.example` 为 `.env`，并填入 MaaS API Key：
+
+```text
+MAAS_ENABLED=auto
+MAAS_API_KEY=你的华为云 MaaS API Key
+MAAS_MODEL=deepseek-v4-pro-IckBJP
+MAAS_BASE_URL=https://api.modelarts-maas.com/openai/v1
+```
+
+未配置 API Key 或 MaaS 请求失败时，系统会自动回退到本地规则引擎，保证 Demo 可继续运行。
+
 启动后访问：
 
 ```text
 http://127.0.0.1:8000/docs
+```
+
+MaaS 配置状态可访问：
+
+```text
+http://127.0.0.1:8000/maas-status
 ```
 
 ## 项目结构
@@ -62,6 +81,7 @@ econometrics-agent-mvp/
 │   ├── main.py
 │   ├── services/
 │   │   ├── data_profile.py
+│   │   ├── maas_client.py
 │   │   ├── model_selector.py
 │   │   └── code_generator.py
 │   └── schemas.py
@@ -71,6 +91,6 @@ econometrics-agent-mvp/
 │   ├── architecture.md
 │   └── midterm_plan.md
 ├── requirements.txt
+├── .env.example
 └── README.md
 ```
-
