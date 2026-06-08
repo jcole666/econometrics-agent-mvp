@@ -1,6 +1,6 @@
 # Econometrics Agent MVP
 
-面向计量建模初学者和社科研究场景的轻量级 Agent Demo。
+面向计量建模初学者和社科研究场景的中期演示项目。
 
 本项目参考 Econometrics-Agent 的总体思路，但中期阶段采用更轻量、可解释、便于展示的工程架构：先通过规则引擎完成数据结构识别、模型推荐、代码模板生成和结果解释，再逐步接入更复杂的计量模型。
 
@@ -25,7 +25,7 @@
         ↓
 模型选择规则引擎
         ↓
-华为云 MaaS 增强推荐（可选，失败自动回退）
+华为云 MaaS 校对结果（可选）
         ↓
 代码模板生成器
         ↓
@@ -59,7 +59,7 @@ MAAS_MODEL=deepseek-v4-pro-IckBJP
 MAAS_BASE_URL=https://api.modelarts-maas.com/openai/v1
 ```
 
-未配置 API Key 或 MaaS 请求失败时，系统会自动回退到本地规则引擎，保证 Demo 可继续运行。
+没有配置 API Key 或 MaaS 请求失败时，后端使用本地规则结果。
 
 启动后访问：
 

@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 from app.schemas import ModelRecommendation, ModelRequest
 from app.services.code_generator import generate_code
 from app.services.data_profile import profile_dataframe
-from app.services.maas_client import MaasUnavailable, enhance_recommendation, get_maas_status
+from app.services.maas_client import MaasUnavailable, get_maas_recommendation, get_maas_status
 from app.services.model_selector import select_model
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +18,7 @@ SAMPLE_DATA_PATH = PROJECT_ROOT / "examples" / "sample_wage.csv"
 
 app = FastAPI(
     title="计量建模 Agent MVP",
-    description="上传表格数据，输入研究问题，自动推荐计量模型并生成 Python 代码模板。",
+    description="上传表格数据，输入研究问题，推荐计量模型并生成 Python 代码模板。",
     version="0.1.0",
     docs_url="/api-docs",
     redoc_url=None,
@@ -79,7 +79,7 @@ def recommend_model(request: ModelRequest) -> ModelRecommendation:
     code = generate_code(model, request)
 
     try:
-        maas_result = enhance_recommendation(request, model, reason, checks, code)
+        maas_result = get_maas_recommendation(request, model, reason, checks, code)
         return ModelRecommendation(
             model=maas_result.model,
             reason=maas_result.reason,
@@ -87,7 +87,7 @@ def recommend_model(request: ModelRequest) -> ModelRecommendation:
             generated_code=maas_result.generated_code,
             provider="huawei_maas",
             maas_used=True,
-            llm_explanation=maas_result.llm_explanation,
+            maas_note=maas_result.note,
         )
     except MaasUnavailable as exc:
         maas_error = str(exc)
@@ -515,7 +515,7 @@ CHINESE_DEMO_HTML = """
     </section>
 
     <section class="full">
-      <h2><span class="step">03</span>Demo 可展示的模型类型</h2>
+      <h2><span class="step">03</span>支持的模型类型</h2>
       <table class="model-table">
         <thead>
           <tr><th>研究场景</th><th>推荐模型</th><th>需要检查的内容</th></tr>
@@ -619,7 +619,7 @@ CHINESE_DEMO_HTML = """
         const data = await response.json();
         if (!response.ok) throw new Error(JSON.stringify(data));
         const source = data.maas_used ? "华为云 MaaS" : "本地规则引擎";
-        const note = data.llm_explanation || data.maas_error || "";
+        const note = data.maas_note || data.maas_error || "";
         box.innerHTML = `
           <span class="model-name">推荐模型：${data.model}</span>
           <span class="source-badge">${source}</span>

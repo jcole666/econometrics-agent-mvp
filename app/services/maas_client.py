@@ -34,7 +34,7 @@ class MaasRecommendation:
     reason: str
     required_checks: list[str]
     generated_code: str
-    llm_explanation: str | None = None
+    note: str | None = None
 
 
 def get_maas_status() -> dict[str, Any]:
@@ -53,7 +53,7 @@ def get_maas_status() -> dict[str, Any]:
     }
 
 
-def enhance_recommendation(
+def get_maas_recommendation(
     request: ModelRequest,
     model: str,
     reason: str,
@@ -78,11 +78,11 @@ def _get_config() -> MaasConfig:
     _load_local_env()
 
     if _is_disabled(os.getenv("MAAS_ENABLED", "auto")):
-        raise MaasUnavailable("MaaS 已关闭，当前使用本地规则引擎。")
+        raise MaasUnavailable("MaaS 已关闭，使用本地规则。")
 
     api_key = _get_api_key()
     if not api_key:
-        raise MaasUnavailable("未配置 MAAS_API_KEY，当前使用本地规则引擎。")
+        raise MaasUnavailable("未配置 MAAS_API_KEY，使用本地规则。")
 
     timeout_text = os.getenv("MAAS_TIMEOUT", "60")
     try:
@@ -135,11 +135,9 @@ def _build_messages(request: ModelRequest, fallback: dict[str, Any]) -> list[dic
         {
             "role": "system",
             "content": (
-                "你是计量经济学建模 Agent 的模型推荐器。"
-                "请基于研究问题、字段信息和已有规则推荐，给出更自然、更稳妥的推荐结果。"
-                "只能选择这些模型之一：OLS、Logit、Panel Fixed Effects、DID、IV-2SLS、RDD。"
-                "返回严格 JSON，不要 Markdown，不要代码围栏。"
-                "JSON 字段必须包含 model、reason、required_checks、generated_code、llm_explanation。"
+                "根据 request 和 rule_recommendation 判断计量模型。"
+                "模型只能取 OLS、Logit、Panel Fixed Effects、DID、IV-2SLS、RDD。"
+                "只返回 JSON，字段为 model、reason、required_checks、generated_code、maas_note。"
             ),
         },
         {
@@ -172,17 +170,17 @@ def _chat_completion(config: MaasConfig, messages: list[dict[str, str]]) -> str:
         with urlrequest.urlopen(req, timeout=config.timeout) as resp:
             response_body = resp.read().decode("utf-8")
     except error.HTTPError as exc:
-        raise MaasUnavailable(f"MaaS 请求失败（HTTP {exc.code}），当前使用本地规则引擎。") from exc
+        raise MaasUnavailable(f"MaaS 请求失败（HTTP {exc.code}），使用本地规则。") from exc
     except error.URLError as exc:
-        raise MaasUnavailable("MaaS 网络请求失败，当前使用本地规则引擎。") from exc
+        raise MaasUnavailable("MaaS 网络请求失败，使用本地规则。") from exc
     except TimeoutError as exc:
-        raise MaasUnavailable("MaaS 请求超时，当前使用本地规则引擎。") from exc
+        raise MaasUnavailable("MaaS 请求超时，使用本地规则。") from exc
 
     try:
         data = json.loads(response_body)
         return data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-        raise MaasUnavailable("MaaS 响应格式异常，当前使用本地规则引擎。") from exc
+        raise MaasUnavailable("MaaS 响应格式异常，使用本地规则。") from exc
 
 
 def _parse_json_content(content: str) -> dict[str, Any]:
@@ -201,11 +199,11 @@ def _parse_json_content(content: str) -> dict[str, Any]:
         start = text.find("{")
         end = text.rfind("}")
         if start == -1 or end <= start:
-            raise MaasUnavailable("MaaS 返回内容不是 JSON，当前使用本地规则引擎。")
+            raise MaasUnavailable("MaaS 返回内容不是 JSON，使用本地规则。")
         try:
             return json.loads(text[start : end + 1])
         except json.JSONDecodeError as exc:
-            raise MaasUnavailable("MaaS 返回内容不是有效 JSON，当前使用本地规则引擎。") from exc
+            raise MaasUnavailable("MaaS 返回内容不是有效 JSON，使用本地规则。") from exc
 
 
 def _normalize_recommendation(
@@ -230,16 +228,16 @@ def _normalize_recommendation(
     if not isinstance(code, str) or not code.strip():
         code = generate_code(model, request)
 
-    explanation = raw.get("llm_explanation") or raw.get("notes")
-    if explanation is not None:
-        explanation = str(explanation).strip() or None
+    note = raw.get("maas_note") or raw.get("notes")
+    if note is not None:
+        note = str(note).strip() or None
 
     return MaasRecommendation(
         model=model,
         reason=reason,
         required_checks=required_checks,
         generated_code=code,
-        llm_explanation=explanation,
+        note=note,
     )
 
 
