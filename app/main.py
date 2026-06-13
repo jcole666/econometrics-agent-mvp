@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 
 from app.schemas import (
@@ -14,13 +13,16 @@ from app.schemas import (
     InferVariablesResponse,
     ModelRecommendation,
     ModelRequest,
+    RunModelResponse,
 )
 from app.services.chat_service import chat_with_agent
 from app.services.code_generator import generate_code
 from app.services.data_profile import profile_dataframe
 from app.services.maas_client import MaasUnavailable, get_maas_recommendation, get_maas_status
+from app.services.model_runner import run_model
 from app.services.model_selector import select_model
 from app.services.variable_inferrer import infer_variables
+from app.utils.data_io import read_upload_dataframe
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DATA_PATH = PROJECT_ROOT / "examples" / "sample_wage.csv"
@@ -80,15 +82,43 @@ def infer_variables_endpoint(request: InferVariablesRequest) -> InferVariablesRe
     description="上传 CSV 或 Excel 文件，返回字段类型、缺失值、唯一值和样例值。",
 )
 async def profile_data(file: UploadFile = File(..., description="CSV 或 Excel 数据文件")) -> dict:
-    content = await file.read()
-    suffix = (file.filename or "").lower()
-
-    if suffix.endswith(".xlsx") or suffix.endswith(".xls"):
-        df = pd.read_excel(io.BytesIO(content))
-    else:
-        df = pd.read_csv(io.BytesIO(content))
+    try:
+        df = await read_upload_dataframe(file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return profile_dataframe(df)
+
+
+@app.post(
+    "/run-model",
+    response_model=RunModelResponse,
+    summary="运行计量模型",
+    description="上传数据并运行预定义模型。第一版支持 OLS 和 Logit，复杂模型返回业务提示。",
+)
+async def run_model_endpoint(
+    file: UploadFile = File(..., description="CSV 或 Excel 数据文件"),
+    model_type: str = Form(..., description="模型类型：OLS / Logit / DID / RDD / IV-2SLS"),
+    dependent_variable: str = Form(..., description="被解释变量 Y"),
+    independent_variables: str = Form(..., description="解释变量 X，英文逗号分隔"),
+    entity_column: str | None = Form(None, description="面板个体 ID 列"),
+    time_column: str | None = Form(None, description="时间列"),
+    treatment_column: str | None = Form(None, description="处理组或处理变量"),
+    running_variable: str | None = Form(None, description="RDD 断点运行变量"),
+    instrument_variable: str | None = Form(None, description="IV 工具变量"),
+) -> RunModelResponse:
+    try:
+        df = await read_upload_dataframe(file)
+    except ValueError as exc:
+        return RunModelResponse(model_type=model_type, success=False, error=str(exc))
+
+    xs = [item.strip() for item in independent_variables.split(",") if item.strip()]
+    return run_model(
+        df=df,
+        model_type=model_type,
+        dependent_variable=dependent_variable,
+        independent_variables=xs,
+    )
 
 
 @app.get("/sample-profile", summary="加载示例数据字段")
