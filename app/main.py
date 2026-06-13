@@ -596,7 +596,7 @@ CHINESE_DEMO_HTML = """
           <input id="llmApiKey" type="password" autocomplete="off" placeholder="留空则使用后端配置" />
         </div>
       </div>
-      <p class="hint">留空时使用后端 .env 配置；填写后仅随本次请求发送。</p>
+      <p class="hint">留空时使用后端 .env 配置；填写自定义 API 地址时需要同时填写对应 API Key。</p>
     </section>
 
     <section>
@@ -683,6 +683,12 @@ CHINESE_DEMO_HTML = """
       };
     }
 
+    function sourceLabel(provider) {
+      if (provider === "custom_model") return "自定义模型";
+      if (provider === "huawei_maas") return "华为云 MaaS";
+      return "本地规则";
+    }
+
     function showFileName() {
       const file = document.getElementById("fileInput").files[0];
       document.getElementById("fileName").textContent = file ? file.name : "尚未选择文件";
@@ -765,7 +771,7 @@ CHINESE_DEMO_HTML = """
         });
         const data = await response.json();
         if (!response.ok) throw new Error(JSON.stringify(data));
-        const source = data.maas_used ? "华为云 MaaS" : "本地规则引擎";
+        const source = sourceLabel(data.provider);
         const note = data.maas_note || data.maas_error || "";
         lastRecommendation = data;
         box.innerHTML = `
@@ -815,7 +821,7 @@ CHINESE_DEMO_HTML = """
         });
         const data = await response.json();
         if (!response.ok) throw new Error(JSON.stringify(data));
-        const source = data.provider === "huawei_maas" ? "华为云 MaaS" : "本地规则";
+        const source = sourceLabel(data.provider);
         renderChatMessage(`助手 · ${source}`, data.reply, "assistant");
         chatHistory.push({ role: "user", content: message });
         chatHistory.push({ role: "assistant", content: data.reply });
