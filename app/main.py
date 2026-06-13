@@ -480,6 +480,28 @@ CHINESE_DEMO_HTML = """
       white-space: nowrap;
     }
     .model-table { min-width: 680px; }
+    .chat-log {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 320px;
+    }
+    .chat-message {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      padding: 10px 12px;
+    }
+    .chat-message.user {
+      border-color: #c2d3cc;
+      background: var(--accent-soft);
+    }
+    .chat-message strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--accent-dark);
+      font-size: 12px;
+    }
     @media (max-width: 860px) {
       main { grid-template-columns: 1fr; }
       .header-inner {
@@ -587,7 +609,18 @@ CHINESE_DEMO_HTML = """
     </section>
 
     <section class="full">
-      <h2><span class="step">03</span>支持的模型类型</h2>
+      <h2><span class="step">03</span>模型问答</h2>
+      <label for="chatMessage">问题</label>
+      <textarea id="chatMessage">为什么推荐这个模型？</textarea>
+      <div class="actions">
+        <button onclick="askAgent()">发送问题</button>
+      </div>
+      <p class="hint">会带上当前字段、推荐模型和生成代码作为上下文</p>
+      <div id="chatResult" class="result chat-log">等待提问...</div>
+    </section>
+
+    <section class="full">
+      <h2><span class="step">04</span>支持的模型类型</h2>
       <table class="model-table">
         <thead>
           <tr><th>研究场景</th><th>推荐模型</th><th>需要检查的内容</th></tr>
@@ -605,6 +638,9 @@ CHINESE_DEMO_HTML = """
   </main>
 
   <script>
+    let lastRecommendation = null;
+    let chatHistory = [];
+
     function splitValues(value) {
       return value.split(",").map(item => item.trim()).filter(Boolean);
     }
@@ -692,6 +728,7 @@ CHINESE_DEMO_HTML = """
         if (!response.ok) throw new Error(JSON.stringify(data));
         const source = data.maas_used ? "华为云 MaaS" : "本地规则引擎";
         const note = data.maas_note || data.maas_error || "";
+        lastRecommendation = data;
         box.innerHTML = `
           <span class="model-name">推荐模型：${data.model}</span>
           <span class="source-badge">${source}</span>
@@ -707,6 +744,59 @@ CHINESE_DEMO_HTML = """
       } finally {
         box.classList.remove("is-loading");
       }
+    }
+
+    async function askAgent() {
+      const box = document.getElementById("chatResult");
+      const message = document.getElementById("chatMessage").value.trim();
+      if (!message) {
+        box.textContent = "请先输入要追问的问题。";
+        return;
+      }
+
+      const payload = {
+        message,
+        history: chatHistory,
+        context: {
+          data_columns: splitValues(document.getElementById("columns").value),
+          recommended_model: lastRecommendation ? lastRecommendation.model : null,
+          generated_code: lastRecommendation ? lastRecommendation.generated_code : null,
+          model_results: null
+        }
+      };
+
+      box.classList.add("is-loading");
+      renderChatMessage("我", message, "user");
+      try {
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(JSON.stringify(data));
+        const source = data.provider === "huawei_maas" ? "华为云 MaaS" : "本地规则";
+        renderChatMessage(`助手 · ${source}`, data.reply, "assistant");
+        chatHistory.push({ role: "user", content: message });
+        chatHistory.push({ role: "assistant", content: data.reply });
+        chatHistory = chatHistory.slice(-8);
+      } catch (error) {
+        renderChatMessage("系统", "问答失败：" + error.message, "assistant");
+      } finally {
+        box.classList.remove("is-loading");
+      }
+    }
+
+    function renderChatMessage(name, content, type) {
+      const box = document.getElementById("chatResult");
+      if (box.textContent === "等待提问...") {
+        box.innerHTML = "";
+      }
+      const item = document.createElement("div");
+      item.className = "chat-message " + type;
+      item.innerHTML = `<strong>${escapeHtml(name)}</strong>${escapeHtml(content)}`;
+      box.appendChild(item);
+      box.scrollTop = box.scrollHeight;
     }
 
     function escapeHtml(value) {
