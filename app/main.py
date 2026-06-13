@@ -480,6 +480,11 @@ CHINESE_DEMO_HTML = """
       white-space: nowrap;
     }
     .model-table { min-width: 680px; }
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr;
+      gap: 12px;
+    }
     .chat-log {
       display: flex;
       flex-direction: column;
@@ -504,6 +509,7 @@ CHINESE_DEMO_HTML = """
     }
     @media (max-width: 860px) {
       main { grid-template-columns: 1fr; }
+      .settings-grid { grid-template-columns: 1fr; }
       .header-inner {
         grid-template-columns: 1fr;
         align-items: start;
@@ -573,6 +579,25 @@ CHINESE_DEMO_HTML = """
   </header>
 
   <main>
+    <section class="full">
+      <h2><span class="step">00</span>模型设置</h2>
+      <div class="settings-grid">
+        <div>
+          <label for="llmBaseUrl">API 地址</label>
+          <input id="llmBaseUrl" placeholder="https://api.modelarts-maas.com/openai/v1" />
+        </div>
+        <div>
+          <label for="llmModel">模型名称</label>
+          <input id="llmModel" placeholder="deepseek-v4-pro-IckBJP" />
+        </div>
+        <div>
+          <label for="llmApiKey">API Key</label>
+          <input id="llmApiKey" type="password" autocomplete="off" placeholder="留空则使用后端配置" />
+        </div>
+      </div>
+      <p class="hint">留空时使用后端 .env 配置；填写后仅随本次请求发送。</p>
+    </section>
+
     <section>
       <h2><span class="step">01</span>上传数据并识别字段</h2>
       <div class="upload-row">
@@ -645,6 +670,18 @@ CHINESE_DEMO_HTML = """
       return value.split(",").map(item => item.trim()).filter(Boolean);
     }
 
+    function getLlmConfig() {
+      const baseUrl = document.getElementById("llmBaseUrl").value.trim();
+      const model = document.getElementById("llmModel").value.trim();
+      const apiKey = document.getElementById("llmApiKey").value.trim();
+      if (!baseUrl && !model && !apiKey) return null;
+      return {
+        base_url: baseUrl || null,
+        model: model || null,
+        api_key: apiKey || null
+      };
+    }
+
     function showFileName() {
       const file = document.getElementById("fileInput").files[0];
       document.getElementById("fileName").textContent = file ? file.name : "尚未选择文件";
@@ -714,7 +751,8 @@ CHINESE_DEMO_HTML = """
         research_question: document.getElementById("question").value,
         columns: splitValues(document.getElementById("columns").value),
         dependent_variable: document.getElementById("y").value || null,
-        independent_variables: splitValues(document.getElementById("xs").value)
+        independent_variables: splitValues(document.getElementById("xs").value),
+        llm_config: getLlmConfig()
       };
       box.classList.add("is-loading");
       box.textContent = "正在推荐模型...";
@@ -762,7 +800,8 @@ CHINESE_DEMO_HTML = """
           recommended_model: lastRecommendation ? lastRecommendation.model : null,
           generated_code: lastRecommendation ? lastRecommendation.generated_code : null,
           model_results: null
-        }
+        },
+        llm_config: getLlmConfig()
       };
 
       box.classList.add("is-loading");
