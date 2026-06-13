@@ -115,11 +115,16 @@ def _has_custom_config(llm_config: LLMConfig | None) -> bool:
 def _get_custom_config(llm_config: LLMConfig | None) -> MaasConfig:
     assert llm_config is not None
 
-    api_key = (llm_config.api_key or _get_api_key()).strip()
+    custom_base_url = (llm_config.base_url or "").strip()
+    custom_api_key = (llm_config.api_key or "").strip()
+    if custom_base_url and not custom_api_key:
+        raise MaasUnavailable("填写自定义 API 地址时，也需要填写对应的 API Key。")
+
+    api_key = custom_api_key or _get_api_key()
     if not api_key:
         raise MaasUnavailable("未填写自定义模型 API Key，使用本地规则。")
 
-    base_url = (llm_config.base_url or os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL)).strip().rstrip("/")
+    base_url = (custom_base_url or os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL)).strip().rstrip("/")
     if not base_url:
         raise MaasUnavailable("未填写自定义模型 API 地址，使用本地规则。")
 
