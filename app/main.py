@@ -7,7 +7,8 @@ import pandas as pd
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse
 
-from app.schemas import ModelRecommendation, ModelRequest
+from app.schemas import ChatRequest, ChatResponse, ModelRecommendation, ModelRequest
+from app.services.chat_service import chat_with_agent
 from app.services.code_generator import generate_code
 from app.services.data_profile import profile_dataframe
 from app.services.maas_client import MaasUnavailable, get_maas_recommendation, get_maas_status
@@ -43,6 +44,16 @@ def health_check() -> dict:
 @app.get("/maas-status", summary="华为云 MaaS 配置状态")
 def maas_status() -> dict:
     return get_maas_status()
+
+
+@app.post(
+    "/chat",
+    response_model=ChatResponse,
+    summary="大模型对话",
+    description="围绕当前数据、推荐模型、生成代码和运行结果进行解释性对话。",
+)
+def chat(request: ChatRequest) -> ChatResponse:
+    return chat_with_agent(request)
 
 
 @app.post(
