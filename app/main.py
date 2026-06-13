@@ -13,6 +13,8 @@ from app.schemas import (
     InferVariablesResponse,
     ModelRecommendation,
     ModelRequest,
+    ReportRequest,
+    ReportResponse,
     RunModelResponse,
 )
 from app.services.chat_service import chat_with_agent
@@ -21,6 +23,7 @@ from app.services.data_profile import profile_dataframe
 from app.services.maas_client import MaasUnavailable, get_maas_recommendation, get_maas_status
 from app.services.model_runner import run_model
 from app.services.model_selector import select_model
+from app.services.report_generator import generate_markdown_report
 from app.services.variable_inferrer import infer_variables
 from app.utils.data_io import read_upload_dataframe
 
@@ -119,6 +122,16 @@ async def run_model_endpoint(
         dependent_variable=dependent_variable,
         independent_variables=xs,
     )
+
+
+@app.post(
+    "/generate-report",
+    response_model=ReportResponse,
+    summary="生成分析报告",
+    description="根据研究问题、模型类型和模型结果生成 Markdown 分析报告。",
+)
+def generate_report(request: ReportRequest) -> ReportResponse:
+    return generate_markdown_report(request)
 
 
 @app.get("/sample-profile", summary="加载示例数据字段")
