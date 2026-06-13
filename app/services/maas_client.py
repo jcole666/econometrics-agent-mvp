@@ -74,6 +74,11 @@ def get_maas_recommendation(
     return _normalize_recommendation(raw, fallback, request)
 
 
+def maas_chat(messages: list[dict[str, str]]) -> str:
+    config = _get_config()
+    return _chat_completion(config, messages)
+
+
 def _get_config() -> MaasConfig:
     _load_local_env()
 
