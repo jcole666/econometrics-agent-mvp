@@ -6,6 +6,7 @@ from typing import Any
 from app.prompts.chat_prompts import CHAT_SYSTEM_PROMPT
 from app.schemas import ChatRequest, ChatResponse
 from app.services.maas_client import MaasUnavailable, maas_chat
+from app.utils.llm_config import llm_provider_name
 
 
 def chat_with_agent(request: ChatRequest) -> ChatResponse:
@@ -14,7 +15,7 @@ def chat_with_agent(request: ChatRequest) -> ChatResponse:
     try:
         reply = maas_chat(messages, request.llm_config).strip()
         if reply:
-            return ChatResponse(reply=reply, provider="huawei_maas")
+            return ChatResponse(reply=reply, provider=llm_provider_name(request.llm_config))
     except MaasUnavailable as exc:
         return ChatResponse(
             reply=_fallback_reply(request),

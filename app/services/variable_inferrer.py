@@ -6,6 +6,7 @@ from typing import Any
 from app.prompts.infer_prompts import INFER_VARIABLES_SYSTEM_PROMPT
 from app.schemas import InferVariablesRequest, InferVariablesResponse
 from app.services.maas_client import MaasUnavailable, maas_chat
+from app.utils.llm_config import llm_provider_name
 
 
 def infer_variables(request: InferVariablesRequest) -> InferVariablesResponse:
@@ -14,7 +15,7 @@ def infer_variables(request: InferVariablesRequest) -> InferVariablesResponse:
     try:
         content = maas_chat(_build_messages(request), request.llm_config)
         raw = _parse_json_content(content)
-        return _normalize_response(raw, request, provider="huawei_maas")
+        return _normalize_response(raw, request, provider=llm_provider_name(request.llm_config))
     except MaasUnavailable as exc:
         fallback.maas_error = str(exc)
         return fallback

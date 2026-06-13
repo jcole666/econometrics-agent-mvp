@@ -26,6 +26,7 @@ from app.services.model_selector import select_model
 from app.services.report_generator import generate_markdown_report
 from app.services.variable_inferrer import infer_variables
 from app.utils.data_io import read_upload_dataframe
+from app.utils.llm_config import llm_provider_name
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DATA_PATH = PROJECT_ROOT / "examples" / "sample_wage.csv"
@@ -157,7 +158,7 @@ def recommend_model(request: ModelRequest) -> ModelRecommendation:
             reason=maas_result.reason,
             required_checks=maas_result.required_checks,
             generated_code=maas_result.generated_code,
-            provider="huawei_maas",
+            provider=llm_provider_name(request.llm_config),
             maas_used=True,
             maas_note=maas_result.note,
         )
