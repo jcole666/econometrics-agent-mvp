@@ -7,12 +7,20 @@ import pandas as pd
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse
 
-from app.schemas import ChatRequest, ChatResponse, ModelRecommendation, ModelRequest
+from app.schemas import (
+    ChatRequest,
+    ChatResponse,
+    InferVariablesRequest,
+    InferVariablesResponse,
+    ModelRecommendation,
+    ModelRequest,
+)
 from app.services.chat_service import chat_with_agent
 from app.services.code_generator import generate_code
 from app.services.data_profile import profile_dataframe
 from app.services.maas_client import MaasUnavailable, get_maas_recommendation, get_maas_status
 from app.services.model_selector import select_model
+from app.services.variable_inferrer import infer_variables
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DATA_PATH = PROJECT_ROOT / "examples" / "sample_wage.csv"
@@ -54,6 +62,16 @@ def maas_status() -> dict:
 )
 def chat(request: ChatRequest) -> ChatResponse:
     return chat_with_agent(request)
+
+
+@app.post(
+    "/infer-variables",
+    response_model=InferVariablesResponse,
+    summary="自动识别变量",
+    description="根据研究问题和字段画像自动识别 Y、X、时间列、处理变量等候选配置。",
+)
+def infer_variables_endpoint(request: InferVariablesRequest) -> InferVariablesResponse:
+    return infer_variables(request)
 
 
 @app.post(
