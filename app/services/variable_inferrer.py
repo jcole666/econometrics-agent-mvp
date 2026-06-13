@@ -12,7 +12,7 @@ def infer_variables(request: InferVariablesRequest) -> InferVariablesResponse:
     fallback = _infer_variables_rules(request)
 
     try:
-        content = maas_chat(_build_messages(request))
+        content = maas_chat(_build_messages(request), request.llm_config)
         raw = _parse_json_content(content)
         return _normalize_response(raw, request, provider="huawei_maas")
     except MaasUnavailable as exc:
@@ -172,5 +172,5 @@ def _mentions_any(text: str, keywords: list[str]) -> bool:
 
 def _dump_model(model: Any) -> dict[str, Any]:
     if hasattr(model, "model_dump"):
-        return model.model_dump()
-    return model.dict()
+        return model.model_dump(exclude={"llm_config"})
+    return model.dict(exclude={"llm_config"})

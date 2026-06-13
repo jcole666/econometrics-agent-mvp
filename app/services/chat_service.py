@@ -12,7 +12,7 @@ def chat_with_agent(request: ChatRequest) -> ChatResponse:
     messages = _build_messages(request)
 
     try:
-        reply = maas_chat(messages).strip()
+        reply = maas_chat(messages, request.llm_config).strip()
         if reply:
             return ChatResponse(reply=reply, provider="huawei_maas")
     except MaasUnavailable as exc:
