@@ -1,6 +1,13 @@
 from pydantic import BaseModel, Field
 
 
+class LLMConfig(BaseModel):
+    api_key: str | None = Field(None, description="用户临时提供的 API Key，不会保存")
+    base_url: str | None = Field(None, description="OpenAI-compatible API Base URL")
+    model: str | None = Field(None, description="模型名称")
+    timeout: float | None = Field(None, description="请求超时时间，单位秒")
+
+
 class ModelRequest(BaseModel):
     research_question: str = Field(
         ...,
@@ -27,6 +34,7 @@ class ModelRequest(BaseModel):
     treatment_column: str | None = Field(None, description="处理组变量或内生解释变量")
     running_variable: str | None = Field(None, description="RDD 中的断点运行变量")
     instrument_variable: str | None = Field(None, description="IV-2SLS 中的工具变量")
+    llm_config: LLMConfig | None = Field(None, description="本次请求临时使用的大模型配置")
 
 
 class ModelRecommendation(BaseModel):
@@ -56,6 +64,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="用户本轮提问")
     history: list[ChatMessage] = Field(default_factory=list, description="历史对话")
     context: ChatContext | None = Field(None, description="当前分析上下文")
+    llm_config: LLMConfig | None = Field(None, description="本次请求临时使用的大模型配置")
 
 
 class ChatResponse(BaseModel):
@@ -73,6 +82,7 @@ class ColumnInfo(BaseModel):
 class InferVariablesRequest(BaseModel):
     research_question: str = Field(..., description="用户输入的研究问题")
     columns: list[ColumnInfo] = Field(..., description="字段画像列表")
+    llm_config: LLMConfig | None = Field(None, description="本次请求临时使用的大模型配置")
 
 
 class InferVariablesResponse(BaseModel):
@@ -121,6 +131,7 @@ class ReportRequest(BaseModel):
     model_type: str
     model_results: dict | None = None
     inference_notes: str | None = None
+    llm_config: LLMConfig | None = None
 
 
 class ReportResponse(BaseModel):
