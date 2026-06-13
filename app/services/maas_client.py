@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request as urlrequest
 
-from app.schemas import ModelRequest
+from app.schemas import LLMConfig, ModelRequest
 from app.services.code_generator import generate_code
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -60,7 +60,7 @@ def get_maas_recommendation(
     required_checks: list[str],
     generated_code: str,
 ) -> MaasRecommendation:
-    config = _get_config()
+    config = _get_config(request.llm_config)
     fallback = {
         "model": model,
         "reason": reason,
@@ -74,13 +74,16 @@ def get_maas_recommendation(
     return _normalize_recommendation(raw, fallback, request)
 
 
-def maas_chat(messages: list[dict[str, str]]) -> str:
-    config = _get_config()
+def maas_chat(messages: list[dict[str, str]], llm_config: LLMConfig | None = None) -> str:
+    config = _get_config(llm_config)
     return _chat_completion(config, messages)
 
 
-def _get_config() -> MaasConfig:
+def _get_config(llm_config: LLMConfig | None = None) -> MaasConfig:
     _load_local_env()
+
+    if _has_custom_config(llm_config):
+        return _get_custom_config(llm_config)
 
     if _is_disabled(os.getenv("MAAS_ENABLED", "auto")):
         raise MaasUnavailable("MaaS 已关闭，使用本地规则。")
@@ -101,6 +104,31 @@ def _get_config() -> MaasConfig:
         model=os.getenv("MAAS_MODEL", DEFAULT_MODEL),
         timeout=timeout,
     )
+
+
+def _has_custom_config(llm_config: LLMConfig | None) -> bool:
+    if llm_config is None:
+        return False
+    return any([llm_config.api_key, llm_config.base_url, llm_config.model])
+
+
+def _get_custom_config(llm_config: LLMConfig | None) -> MaasConfig:
+    assert llm_config is not None
+
+    api_key = (llm_config.api_key or _get_api_key()).strip()
+    if not api_key:
+        raise MaasUnavailable("未填写自定义模型 API Key，使用本地规则。")
+
+    base_url = (llm_config.base_url or os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL)).strip().rstrip("/")
+    if not base_url:
+        raise MaasUnavailable("未填写自定义模型 API 地址，使用本地规则。")
+
+    model = (llm_config.model or os.getenv("MAAS_MODEL", DEFAULT_MODEL)).strip()
+    if not model:
+        raise MaasUnavailable("未填写自定义模型名称，使用本地规则。")
+
+    timeout = llm_config.timeout or _get_timeout()
+    return MaasConfig(api_key=api_key, base_url=base_url, model=model, timeout=timeout)
 
 
 def _load_local_env() -> None:
@@ -128,6 +156,14 @@ def _get_api_key() -> str:
 
 def _is_disabled(value: str) -> bool:
     return value.strip().lower() in {"0", "false", "off", "no", "disabled"}
+
+
+def _get_timeout() -> float:
+    timeout_text = os.getenv("MAAS_TIMEOUT", "60")
+    try:
+        return float(timeout_text)
+    except ValueError:
+        return 60.0
 
 
 def _build_messages(request: ModelRequest, fallback: dict[str, Any]) -> list[dict[str, str]]:
@@ -248,5 +284,5 @@ def _normalize_recommendation(
 
 def _dump_model(model: ModelRequest) -> dict[str, Any]:
     if hasattr(model, "model_dump"):
-        return model.model_dump()
-    return model.dict()
+        return model.model_dump(exclude={"llm_config"})
+    return model.dict(exclude={"llm_config"})
