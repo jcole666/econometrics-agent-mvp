@@ -1,0 +1,8 @@
+[maas]
+enabled = "auto"
+base_url = "https://api.modelarts-maas.com/openai/v1"
+model = "deepseek-v4-pro-IckBJP"
+timeout = 60
+
+# Keep the real key in .env or a local config.toml that is not committed.
+# MAAS_API_KEY="..."

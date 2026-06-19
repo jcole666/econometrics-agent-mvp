@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+app/node_modules/
+app/dist/
+app/dist-electron/
+app/.vite/
+
+.env
+config.toml
+*.log
+.edge-profile*/
+render-check*.png

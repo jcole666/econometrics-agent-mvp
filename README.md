@@ -32,6 +32,33 @@
 模型执行与结果解释
 ```
 
+## 桌面工作台版本
+
+新的桌面式工作台放在 `desktop-workbench/`，保持 `app/ + sidecar/` 结构：
+
+- `desktop-workbench/sidecar/`：FastAPI 本地后端，负责数据画像、变量识别、模型推荐、模型运行、问答和报告生成。
+- `desktop-workbench/app/`：React + Vite + Electron 前端工作台，界面已中文化。
+
+运行方式：
+
+```powershell
+cd desktop-workbench
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r sidecar\requirements.txt
+python -m sidecar.serve --port 8768
+
+cd app
+npm install
+npm run dev
+```
+
+浏览器访问：
+
+```text
+http://127.0.0.1:5173
+```
+
 ## 当前阶段范围
 
 中期版本优先保证基础闭环：
