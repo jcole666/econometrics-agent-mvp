@@ -17,7 +17,7 @@ npm run dev
 In another terminal, start the sidecar when running the web renderer directly:
 
 ```powershell
-cd desktop-workbench
+cd desktop-app
 .\.venv\Scripts\python.exe -m sidecar.serve --port 8768
 ```
 
@@ -26,7 +26,7 @@ Then open `http://127.0.0.1:5173`.
 Electron development:
 
 ```powershell
-cd desktop-workbench\app
+cd desktop-app\app
 npm run dev
 # in another terminal after Vite is running:
 npm run dev:electron
@@ -35,7 +35,7 @@ npm run dev:electron
 Build the sidecar executable:
 
 ```powershell
-cd desktop-workbench
+cd desktop-app
 .\scripts\build-sidecar.ps1
 ```
 
@@ -48,7 +48,7 @@ sidecar-dist\econometrics-sidecar\econometrics-sidecar.exe
 Build the Windows portable app:
 
 ```powershell
-cd desktop-workbench
+cd desktop-app
 .\scripts\package-windows.ps1
 ```
 
