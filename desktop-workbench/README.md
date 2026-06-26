@@ -45,6 +45,15 @@ The build writes the executable to:
 sidecar-dist\econometrics-sidecar\econometrics-sidecar.exe
 ```
 
+Build the Windows portable app:
+
+```powershell
+cd desktop-workbench\app
+npm run package:win
+```
+
+The portable executable is written under `app\release\`.
+
 ## Scope
 
 The first slice supports:

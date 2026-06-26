@@ -6,6 +6,7 @@ __pycache__/
 app/node_modules/
 app/dist/
 app/dist-electron/
+app/release/
 app/.vite/
 
 sidecar-build/
