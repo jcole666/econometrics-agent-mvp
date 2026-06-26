@@ -54,7 +54,7 @@
       }
     ],
     "win": {
-      "signExecutable": false,
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "portable",
