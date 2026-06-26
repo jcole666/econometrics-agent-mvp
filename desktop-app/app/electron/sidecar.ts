@@ -100,7 +100,7 @@ export function checkSidecarHealth(timeoutMs = 1000) {
   });
 }
 
-export function waitForSidecar(timeoutMs = 15000) {
+export function waitForSidecar(timeoutMs = 60000) {
   const startedAt = Date.now();
 
   return new Promise<boolean>((resolve) => {
