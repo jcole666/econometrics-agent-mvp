@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -28,7 +29,13 @@ from sidecar.services.model_selector import select_model
 from sidecar.services.report_generator import generate_markdown_report
 from sidecar.services.variable_inferrer import infer_variables
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+def app_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    return Path(__file__).resolve().parents[1]
+
+
+PROJECT_ROOT = app_root()
 SAMPLE_DATA_PATH = PROJECT_ROOT / "examples" / "sample_wage.csv"
 
 app = FastAPI(

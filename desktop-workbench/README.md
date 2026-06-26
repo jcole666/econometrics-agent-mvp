@@ -32,6 +32,19 @@ npm run dev
 npm run dev:electron
 ```
 
+Build the sidecar executable:
+
+```powershell
+cd desktop-workbench
+.\scripts\build-sidecar.ps1
+```
+
+The build writes the executable to:
+
+```text
+sidecar-dist\econometrics-sidecar\econometrics-sidecar.exe
+```
+
 ## Scope
 
 The first slice supports:

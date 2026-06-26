@@ -4,6 +4,8 @@ import argparse
 
 import uvicorn
 
+from sidecar.api import app
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the econometrics workbench sidecar.")
@@ -12,7 +14,8 @@ def main() -> None:
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
 
-    uvicorn.run("sidecar.api:app", host=args.host, port=args.port, reload=args.reload)
+    target = "sidecar.api:app" if args.reload else app
+    uvicorn.run(target, host=args.host, port=args.port, reload=args.reload)
 
 
 if __name__ == "__main__":

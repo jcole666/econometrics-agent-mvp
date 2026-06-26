@@ -8,6 +8,9 @@ app/dist/
 app/dist-electron/
 app/.vite/
 
+sidecar-build/
+sidecar-dist/
+
 .env
 config.toml
 *.log
