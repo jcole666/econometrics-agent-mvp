@@ -1,6 +1,8 @@
 {
   "name": "econometrics-agent-workbench",
   "version": "0.1.0",
+  "description": "Desktop workbench for econometric model selection, execution, and reporting.",
+  "author": "jcole666",
   "private": true,
   "main": "dist-electron/electron/main.js",
   "config": {
