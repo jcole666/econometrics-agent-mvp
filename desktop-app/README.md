@@ -63,7 +63,7 @@ npm install
 ```powershell
 # 终端 1
 cd desktop-app\app
-npm run dev
+npm run dev:renderer
 ```
 
 ```powershell
