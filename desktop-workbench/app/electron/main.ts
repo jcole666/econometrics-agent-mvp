@@ -23,13 +23,18 @@ function packagedSidecarPath() {
   return path.join(process.resourcesPath, "sidecar", "econometrics-sidecar", name);
 }
 
+function hasPackagedSidecar() {
+  return fs.existsSync(packagedSidecarPath());
+}
+
 function startSidecar() {
   const root = projectRoot();
-  const command = app.isPackaged ? packagedSidecarPath() : pythonPath(root);
-  const args = app.isPackaged ? ["--port", String(SIDECAR_PORT)] : ["-m", "sidecar.serve", "--port", String(SIDECAR_PORT)];
-  const cwd = app.isPackaged ? path.dirname(command) : root;
+  const usePackagedSidecar = hasPackagedSidecar();
+  const command = usePackagedSidecar ? packagedSidecarPath() : pythonPath(root);
+  const args = usePackagedSidecar ? ["--port", String(SIDECAR_PORT)] : ["-m", "sidecar.serve", "--port", String(SIDECAR_PORT)];
+  const cwd = usePackagedSidecar ? path.dirname(command) : root;
 
-  if (app.isPackaged && !fs.existsSync(command)) {
+  if ((app.isPackaged || process.env.NODE_ENV === "production") && !fs.existsSync(command)) {
     throw new Error(`Sidecar executable not found: ${command}`);
   }
 
@@ -110,7 +115,7 @@ function createWindow() {
   });
 
   const devUrl = process.env.VITE_DEV_SERVER_URL || "http://127.0.0.1:5173";
-  if (app.isPackaged || process.env.NODE_ENV === "production") {
+  if (app.isPackaged || hasPackagedSidecar() || process.env.NODE_ENV === "production") {
     win.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
   } else {
     win.loadURL(devUrl);
