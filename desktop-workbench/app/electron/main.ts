@@ -20,7 +20,7 @@ async function showStartupError(detail: string) {
   await dialog.showMessageBox({
     type: "error",
     title: APP_TITLE,
-    message: "The local analysis service did not start.",
+    message: "本地分析服务启动失败。",
     detail
   });
 }
@@ -71,7 +71,7 @@ if (!singleInstanceLock) {
       const alreadyRunning = await checkSidecarHealth(500);
 
       if (packagedSidecar && alreadyRunning) {
-        await showStartupError(`Port ${SIDECAR_PORT} is already in use. Close the other instance and start the app again.`);
+        await showStartupError(`端口 ${SIDECAR_PORT} 已被占用。请关闭正在运行的其他实例后再启动。`);
         app.quit();
         return;
       }
@@ -83,8 +83,8 @@ if (!singleInstanceLock) {
       const ready = alreadyRunning || (await waitForSidecar());
       if (!ready) {
         const exitCode = lastSidecarExitCode();
-        const exitNote = exitCode === null ? "" : ` Sidecar exited with code ${exitCode}.`;
-        await showStartupError(`Port: ${SIDECAR_PORT}.${exitNote}`);
+        const exitNote = exitCode === null ? "" : `进程退出码：${exitCode}。`;
+        await showStartupError(`服务端口：${SIDECAR_PORT}。${exitNote}`);
         app.quit();
         return;
       }

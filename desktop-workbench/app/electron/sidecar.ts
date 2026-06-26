@@ -40,13 +40,13 @@ export function startSidecar() {
   const cwd = usePackagedSidecar ? path.dirname(command) : root;
 
   if ((app.isPackaged || process.env.NODE_ENV === "production") && !fs.existsSync(command)) {
-    throw new Error(`Sidecar executable not found: ${command}`);
+    throw new Error(`找不到本地分析服务程序：${command}`);
   }
 
   sidecar = spawn(command, args, {
     cwd,
     env: { ...process.env, PYTHONUNBUFFERED: "1" },
-    stdio: "ignore",
+    stdio: app.isPackaged ? "ignore" : "inherit",
     windowsHide: true
   });
 
