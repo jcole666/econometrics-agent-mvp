@@ -1,90 +1,96 @@
 # Econometrics Agent Workbench
 
-Desktop-style workbench for the econometrics agent. The project mirrors the `checker` shape with a React/Electron `app/` and a Python FastAPI `sidecar/`.
+桌面版计量建模工作台。Electron 负责窗口和应用生命周期，Python sidecar 负责本地数据分析、模型推荐、模型运行和报告生成。
 
-## Run
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r sidecar\requirements.txt
-
-cd app
-npm install
-npm run dev
-```
-
-In another terminal, start the sidecar when running the web renderer directly:
-
-```powershell
-cd desktop-app
-.\.venv\Scripts\python.exe -m sidecar.serve --port 8768
-```
-
-Then open `http://127.0.0.1:5173`.
-
-Electron development:
-
-```powershell
-cd desktop-app\app
-npm run dev
-# in another terminal after Vite is running:
-npm run dev:electron
-```
-
-Build the sidecar executable:
-
-```powershell
-cd desktop-app
-.\scripts\build-sidecar.ps1
-```
-
-The build writes the executable to:
+## 目录
 
 ```text
-sidecar-dist\econometrics-sidecar\econometrics-sidecar.exe
+app/          桌面界面和 Electron 主进程
+sidecar/      FastAPI 本地分析服务
+examples/     示例数据
+packaging/    PyInstaller 配置
+scripts/      构建脚本
 ```
 
-Build the Windows portable app:
+## 打包
+
+在仓库根目录运行：
 
 ```powershell
-cd desktop-app
+.\package-windows.ps1
+```
+
+或在当前目录运行：
+
+```powershell
 .\scripts\package-windows.ps1
 ```
 
-The portable executable is written under `app\release\`.
+打包流程会先确认 sidecar exe，再构建 Electron portable 应用。输出位置：
 
-## Scope
+```text
+app\release\Econometrics-Agent-Workbench-0.1.0-portable.exe
+```
 
-The first slice supports:
-
-- data profiling for CSV and Excel files
-- variable inference from a research question
-- model recommendation for OLS, Logit, Panel FE, DID, RDD, and IV-2SLS
-- real OLS and Logit execution through statsmodels
-- safe business messages for complex models that are not executable yet
-- chat fallback and Markdown report generation
-
-`/run-model` does not execute generated code, user scripts, `eval`, or uploaded programs.
-
-## Sensitive Data
-
-Do not store API keys in source files or docs. Use `.env`, environment variables, or an untracked `config.toml`.
-
-Supported environment variables:
+需要强制重建 sidecar 时：
 
 ```powershell
+.\scripts\package-windows.ps1 -RebuildSidecar
+```
+
+如果 `sidecar-dist\econometrics-sidecar` 已存在，脚本会停止并提示手动处理，避免误删本地构建产物。
+
+## 开发
+
+准备 Python 依赖：
+
+```powershell
+cd desktop-app
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r sidecar\requirements.txt
+```
+
+准备界面依赖：
+
+```powershell
+cd app
+npm install
+```
+
+开发模式需要两个终端：
+
+```powershell
+# 终端 1
+cd desktop-app\app
+npm run dev
+```
+
+```powershell
+# 终端 2
+cd desktop-app\app
+npm run dev:electron
+```
+
+这个模式只用于开发。正式给别人用时，直接发 `app\release\` 里的 portable exe。
+
+## 检查
+
+```powershell
+cd desktop-app
+..\.venv\Scripts\python.exe -m pytest sidecar\tests
+npm --prefix app run typecheck
+```
+
+## 配置
+
+不要把密钥写进代码。需要 MaaS 时，用 `.env`、环境变量，或本地未跟踪的 `config.toml`。
+
+常用环境变量：
+
+```text
 MAAS_ENABLED=auto
 MAAS_BASE_URL=https://api.modelarts-maas.com/openai/v1
 MAAS_MODEL=deepseek-v4-pro-IckBJP
 MAAS_API_KEY=...
-```
-
-## Verification
-
-```powershell
-.\.venv\Scripts\python.exe -m compileall sidecar
-.\.venv\Scripts\python.exe -m pytest sidecar\tests
-cd app
-npm run typecheck
 ```

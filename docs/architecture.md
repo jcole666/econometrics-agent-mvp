@@ -1,52 +1,44 @@
-# 系统设计草案
+# Architecture
 
-## 参考项目启发
-
-参考项目 Econometrics-Agent 的核心思路包括：
-
-- 使用大模型理解用户的计量分析需求；
-- 使用数据解释器拆解任务；
-- 通过计量工具库调用 OLS、IV-2SLS、DID、RDD、PSM 等方法；
-- 生成并执行 Python 代码；
-- 通过报错反思机制修正代码。
-
-本项目中期阶段不直接复刻其重型架构，而是抽取其中最关键的能力，构建轻量 Demo。
-
-## 本项目架构
+当前版本只保留桌面应用主线。
 
 ```text
-Frontend / API Docs
-        ↓
-FastAPI Backend
-        ↓
-Data Profiler
-        ↓
-Model Selector
-        ↓
-Code Generator
-        ↓
-Econometrics Runtime
+Econometrics-Agent-Workbench.exe
+        |
+        v
+Electron main process
+        |
+        +-- React renderer
+        |
+        +-- packaged sidecar process
+              |
+              v
+          FastAPI endpoints
+              |
+              +-- data profiling
+              +-- variable inference
+              +-- model recommendation
+              +-- OLS / Logit execution
+              +-- chat and report generation
 ```
 
-## 模块说明
+## 入口
 
-### 数据解析模块
+- `desktop-app/app/electron/main.ts`：窗口、单实例、启动流程。
+- `desktop-app/app/electron/sidecar.ts`：sidecar 进程启动、健康检查和退出处理。
+- `desktop-app/app/src/App.tsx`：桌面界面。
+- `desktop-app/sidecar/api.py`：本地分析 API。
 
-读取用户上传的 CSV / Excel，返回行数、列名、字段类型、缺失值、唯一值数量和样例值。
+## 打包
 
-### 模型选择模块
+`desktop-app/scripts/package-windows.ps1` 是主构建脚本：
 
-结合用户自然语言需求和字段配置，使用规则引擎判断推荐模型。
+1. 检查或构建 `sidecar-dist/econometrics-sidecar/econometrics-sidecar.exe`。
+2. 构建 React 和 Electron 主进程。
+3. 通过 electron-builder 生成 Windows portable exe。
 
-### 代码生成模块
+根目录 `package-windows.ps1` 只是快捷入口。
 
-根据模型类型生成 statsmodels / linearmodels 代码模板，保证用户可以复制运行和复现。
+## 运行时
 
-### 后续扩展模块
-
-后续可接入大模型，用于：
-
-- 辅助识别 Y、X、处理变量、工具变量；
-- 解释回归表；
-- 根据报错修复代码；
-- 整理演示报告。
+用户双击 portable exe 后，Electron 会启动本地 sidecar，并等待 `/health` 返回 `ok`。如果启动失败，应用会弹出中文错误提示，不会静默白屏。
