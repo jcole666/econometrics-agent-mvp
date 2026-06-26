@@ -1,10 +1,13 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 
 import { app, BrowserWindow } from "electron";
 
-let sidecar: ChildProcessWithoutNullStreams | null = null;
+const SIDECAR_PORT = 8768;
+
+let sidecar: ChildProcess | null = null;
 
 function projectRoot() {
   return path.resolve(__dirname, "..", "..", "..");
@@ -15,13 +18,25 @@ function pythonPath(root: string) {
   return fs.existsSync(localPython) ? localPython : "python";
 }
 
+function packagedSidecarPath() {
+  const name = process.platform === "win32" ? "econometrics-sidecar.exe" : "econometrics-sidecar";
+  return path.join(process.resourcesPath, "sidecar", "econometrics-sidecar", name);
+}
+
 function startSidecar() {
   const root = projectRoot();
-  const python = pythonPath(root);
-  sidecar = spawn(python, ["-m", "sidecar.serve", "--port", "8768"], {
-    cwd: root,
+  const command = app.isPackaged ? packagedSidecarPath() : pythonPath(root);
+  const args = app.isPackaged ? ["--port", String(SIDECAR_PORT)] : ["-m", "sidecar.serve", "--port", String(SIDECAR_PORT)];
+  const cwd = app.isPackaged ? path.dirname(command) : root;
+
+  if (app.isPackaged && !fs.existsSync(command)) {
+    throw new Error(`Sidecar executable not found: ${command}`);
+  }
+
+  sidecar = spawn(command, args, {
+    cwd,
     env: { ...process.env, PYTHONUNBUFFERED: "1" },
-    stdio: "pipe",
+    stdio: "ignore",
     windowsHide: true
   });
 
@@ -35,6 +50,48 @@ function stopSidecar() {
     sidecar.kill();
   }
   sidecar = null;
+}
+
+function waitForSidecar(timeoutMs = 15000) {
+  const startedAt = Date.now();
+
+  return new Promise<void>((resolve) => {
+    const ping = () => {
+      let settled = false;
+
+      const retry = () => {
+        if (settled) return;
+        settled = true;
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve();
+          return;
+        }
+        setTimeout(ping, 500);
+      };
+
+      const request = http.get(
+        { hostname: "127.0.0.1", port: SIDECAR_PORT, path: "/health", timeout: 1000 },
+        (response) => {
+          response.resume();
+          if (settled) return;
+          if (response.statusCode && response.statusCode < 500) {
+            settled = true;
+            resolve();
+            return;
+          }
+          retry();
+        }
+      );
+
+      request.on("timeout", () => {
+        request.destroy();
+        retry();
+      });
+      request.on("error", retry);
+    };
+
+    ping();
+  });
 }
 
 function createWindow() {
@@ -53,15 +110,16 @@ function createWindow() {
   });
 
   const devUrl = process.env.VITE_DEV_SERVER_URL || "http://127.0.0.1:5173";
-  if (process.env.NODE_ENV === "production") {
+  if (app.isPackaged || process.env.NODE_ENV === "production") {
     win.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
   } else {
     win.loadURL(devUrl);
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   startSidecar();
+  await waitForSidecar();
   createWindow();
 
   app.on("activate", () => {
