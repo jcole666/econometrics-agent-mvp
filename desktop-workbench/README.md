@@ -48,8 +48,8 @@ sidecar-dist\econometrics-sidecar\econometrics-sidecar.exe
 Build the Windows portable app:
 
 ```powershell
-cd desktop-workbench\app
-npm run package:win
+cd desktop-workbench
+.\scripts\package-windows.ps1
 ```
 
 The portable executable is written under `app\release\`.
