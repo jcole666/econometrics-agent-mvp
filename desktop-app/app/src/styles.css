@@ -388,6 +388,10 @@ h1 {
   gap: 10px;
 }
 
+.rail-left {
+  overflow-y: auto;
+}
+
 .panel {
   min-height: 0;
   border: 1px solid var(--line);
@@ -397,11 +401,16 @@ h1 {
   overflow: auto;
 }
 
-.rail-left .panel:nth-child(2) {
-  flex: 1 1 210px;
+.rail-left .panel {
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
-.rail-left .panel:nth-child(3),
+.rail-left .panel:nth-child(3) {
+  flex: 1 0 auto;
+  min-height: 390px;
+}
+
 .rail-main .panel,
 .rail-right .panel {
   flex: 1 1 0;
