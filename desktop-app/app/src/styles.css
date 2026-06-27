@@ -135,7 +135,7 @@ pre {
   justify-content: space-between;
   border-bottom: 1px solid var(--line-strong);
   background: var(--surface);
-  padding: 13px 62px 13px 18px;
+  padding: 13px 116px 13px 18px;
   overflow: hidden;
 }
 
@@ -172,14 +172,23 @@ pre {
 .settings-button {
   position: absolute;
   top: 21px;
-  right: 18px;
+  right: 72px;
   z-index: 2;
   flex: 0 0 34px;
+  border-color: var(--moss-dark);
+  background: var(--moss);
+  color: #fff;
 }
 
 .settings-active {
   border-color: var(--moss-dark);
   background: var(--moss);
+  color: #fff;
+}
+
+.settings-button:hover:not(:disabled) {
+  border-color: var(--moss-dark);
+  background: var(--moss-dark);
   color: #fff;
 }
 
