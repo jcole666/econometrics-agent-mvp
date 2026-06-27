@@ -150,6 +150,7 @@ pre {
 .topbar-actions {
   flex: 0 1 474px;
   margin-left: auto;
+  margin-right: 54px;
   justify-content: flex-end;
   display: flex;
   align-items: center;
