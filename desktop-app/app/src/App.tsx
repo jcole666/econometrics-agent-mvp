@@ -6,9 +6,11 @@ import {
   FileUp,
   MessageSquare,
   Play,
+  Plus,
   RefreshCw,
   RotateCcw,
   Save,
+  Search,
   Send,
   Settings,
   Sparkles,
@@ -16,7 +18,7 @@ import {
   Wand2,
   X
 } from "lucide-react";
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   chat,
@@ -44,6 +46,8 @@ const DEFAULT_QUESTION = "教育水平是否会在控制工作经验和性别后
 const DEFAULT_COLUMNS = "income, education, experience, gender";
 const CHAT_PLACEHOLDER = "为什么推荐这个模型？";
 const SETTINGS_KEY = "econometrics-agent.model-settings";
+const CHAT_SESSIONS_KEY = "econometrics-agent.chat-sessions";
+const ACTIVE_CHAT_KEY = "econometrics-agent.active-chat";
 
 type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample";
 
@@ -53,6 +57,18 @@ interface ModelSettings {
   model: string;
   apiKey: string;
   timeout: string;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  updatedAt: number;
+}
+
+interface ChatState {
+  sessions: ChatSession[];
+  activeId: string;
 }
 
 const MODEL_OPTIONS = [
@@ -136,6 +152,96 @@ function missingModelSettings(settings: ModelSettings): string[] {
   return missing;
 }
 
+function nextChatId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function titleFromText(value: string): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text) return "新会话";
+  return text.length > 22 ? `${text.slice(0, 22)}...` : text;
+}
+
+function titleFromMessages(messages: ChatMessage[]): string {
+  return titleFromText(messages.find((item) => item.role === "user")?.content ?? "");
+}
+
+function createChatSession(): ChatSession {
+  return {
+    id: nextChatId(),
+    title: "新会话",
+    messages: [],
+    updatedAt: Date.now()
+  };
+}
+
+function normalizeChatMessage(value: unknown): ChatMessage | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Partial<ChatMessage>;
+  if ((item.role === "user" || item.role === "assistant") && typeof item.content === "string") {
+    return { role: item.role, content: item.content };
+  }
+  return null;
+}
+
+function normalizeChatSession(value: unknown): ChatSession | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Partial<ChatSession>;
+  const messages = Array.isArray(item.messages)
+    ? item.messages.map(normalizeChatMessage).filter((message): message is ChatMessage => Boolean(message))
+    : [];
+  return {
+    id: typeof item.id === "string" && item.id.trim() ? item.id : nextChatId(),
+    title: typeof item.title === "string" && item.title.trim() ? item.title.trim() : titleFromMessages(messages),
+    messages,
+    updatedAt: typeof item.updatedAt === "number" && Number.isFinite(item.updatedAt) ? item.updatedAt : Date.now()
+  };
+}
+
+function loadChatState(): ChatState {
+  try {
+    const raw = localStorage.getItem(CHAT_SESSIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    const sessions = Array.isArray(parsed)
+      ? parsed.map(normalizeChatSession).filter((session): session is ChatSession => Boolean(session))
+      : [];
+
+    if (sessions.length === 0) {
+      const session = createChatSession();
+      return { sessions: [session], activeId: session.id };
+    }
+
+    const savedActiveId = localStorage.getItem(ACTIVE_CHAT_KEY);
+    return {
+      sessions,
+      activeId: sessions.some((session) => session.id === savedActiveId) ? savedActiveId! : sessions[0].id
+    };
+  } catch {
+    const session = createChatSession();
+    return { sessions: [session], activeId: session.id };
+  }
+}
+
+function chatPreview(session: ChatSession): string {
+  const lastMessage = session.messages[session.messages.length - 1];
+  const last = lastMessage?.content.replace(/\s+/g, " ").trim();
+  if (!last) return "还没有消息";
+  return last.length > 32 ? `${last.slice(0, 32)}...` : last;
+}
+
+function formatChatTime(value: number): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${month}/${day} ${hour}:${minute}`;
+}
+
 export default function App() {
   const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");
   const [file, setFile] = useState<File | null>(null);
@@ -154,22 +260,55 @@ export default function App() {
   const [modelType, setModelType] = useState("OLS");
   const [runResult, setRunResult] = useState<RunModelResponse | null>(null);
   const [chatInput, setChatInput] = useState("");
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatSearch, setChatSearch] = useState("");
+  const [chatState, setChatState] = useState<ChatState>(() => loadChatState());
+  const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [report, setReport] = useState("");
   const [status, setStatus] = useState("就绪");
   const [busy, setBusy] = useState<BusyKey | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
+  const chatLogRef = useRef<HTMLDivElement | null>(null);
 
   const columns = useMemo(() => splitList(columnsInput), [columnsInput]);
   const llmConfig = useMemo(() => toLLMConfig(modelSettings), [modelSettings]);
+  const currentChat = useMemo(
+    () => chatState.sessions.find((session) => session.id === chatState.activeId) ?? chatState.sessions[0],
+    [chatState]
+  );
+  const chatHistory = currentChat?.messages ?? [];
+  const filteredChatSessions = useMemo(() => {
+    const keyword = chatSearch.trim().toLowerCase();
+    return [...chatState.sessions]
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .filter((session) => {
+        if (!keyword) return true;
+        const text = [session.title, ...session.messages.map((message) => message.content)].join("\n").toLowerCase();
+        return text.includes(keyword);
+      });
+  }, [chatSearch, chatState.sessions]);
 
   useEffect(() => {
     getHealth()
       .then(() => setHealth("online"))
       .catch(() => setHealth("offline"));
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(chatState.sessions));
+      localStorage.setItem(ACTIVE_CHAT_KEY, chatState.activeId);
+    } catch {
+    }
+  }, [chatState]);
+
+  useEffect(() => {
+    const node = chatLogRef.current;
+    if (node) {
+      node.scrollTop = node.scrollHeight;
+    }
+  }, [busy, currentChat?.id, chatHistory.length]);
 
   useEffect(() => {
     window.workbench?.onOpenModelSettings?.(() => {
@@ -329,9 +468,49 @@ export default function App() {
     }
   }
 
+  function saveChatMessages(sessionId: string, messages: ChatMessage[]) {
+    setChatState((current) => ({
+      ...current,
+      sessions: current.sessions.map((session) => {
+        if (session.id !== sessionId) return session;
+        return {
+          ...session,
+          title: session.title === "新会话" ? titleFromMessages(messages) : session.title,
+          messages,
+          updatedAt: Date.now()
+        };
+      })
+    }));
+  }
+
+  function newChat() {
+    if (currentChat && currentChat.messages.length === 0) {
+      setChatInput("");
+      setChatSearch("");
+      setChatState((current) => ({ ...current, activeId: currentChat.id }));
+      setStatus("已切换到空白会话。");
+      return;
+    }
+
+    const session = createChatSession();
+    setChatInput("");
+    setChatSearch("");
+    setChatState((current) => ({
+      sessions: [session, ...current.sessions],
+      activeId: session.id
+    }));
+    setStatus("已新建会话。");
+  }
+
+  function openChat(sessionId: string) {
+    setChatInput("");
+    setChatState((current) => ({ ...current, activeId: sessionId }));
+    setStatus("已打开历史会话。");
+  }
+
   async function sendChat() {
     const message = chatInput.trim();
-    if (!message) return;
+    if (!message || !currentChat) return;
 
     const missing = missingModelSettings(modelSettings);
     if (missing.length > 0) {
@@ -348,16 +527,19 @@ export default function App() {
       model_results: runResult?.results ?? null
     };
     const visibleHistory = [...chatHistory, { role: "user" as const, content: message }];
-    setChatHistory(visibleHistory);
+    const sessionId = currentChat.id;
+    saveChatMessages(sessionId, visibleHistory);
     setChatInput("");
+    setPendingChatId(sessionId);
     setBusy("chat");
     try {
       const response = await chat(message, chatHistory.slice(-8), context, llmConfig);
-      setChatHistory([...visibleHistory, { role: "assistant", content: response.reply }]);
+      saveChatMessages(sessionId, [...visibleHistory, { role: "assistant", content: response.reply }]);
       setStatus(response.maas_error ? `回答来源：${providerLabel(response.provider)}。${response.maas_error}` : `回答来源：${providerLabel(response.provider)}。`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "问答失败。");
     } finally {
+      setPendingChatId(null);
       setBusy(null);
     }
   }
@@ -385,6 +567,14 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-actions">
+          <div className="status-strip">
+            <span className={`health health-${health}`} />
+            <span>{health === "online" ? "后端服务在线" : health === "offline" ? "后端服务离线" : "正在检查后端"}</span>
+            <span className={`model-badge ${modelSettings.enabled ? "model-badge-on" : ""}`}>
+              {modelSettings.enabled ? modelSettings.model || "自定义模型" : "本地规则"}
+            </span>
+            <span className="status-text">{status}</span>
+          </div>
           <button
             className={`icon-button settings-button ${modelSettings.enabled ? "settings-active" : ""}`}
             type="button"
@@ -394,14 +584,6 @@ export default function App() {
           >
             <Settings size={18} />
           </button>
-          <div className="status-strip">
-            <span className={`health health-${health}`} />
-            <span>{health === "online" ? "后端服务在线" : health === "offline" ? "后端服务离线" : "正在检查后端"}</span>
-            <span className={`model-badge ${modelSettings.enabled ? "model-badge-on" : ""}`}>
-              {modelSettings.enabled ? modelSettings.model || "自定义模型" : "本地规则"}
-            </span>
-            <span className="status-text">{status}</span>
-          </div>
         </div>
       </header>
 
@@ -494,7 +676,41 @@ export default function App() {
 
         <aside className="rail rail-right">
           <Panel title="建模问答" icon={<MessageSquare size={17} />}>
-            <div className="chat-log">
+            <div className="chat-tools">
+              <button className="secondary chat-new-button" type="button" onClick={newChat} title="新建会话">
+                <Plus size={15} />
+                <span>新会话</span>
+              </button>
+              <label className="chat-search-field" title="查找历史对话">
+                <Search size={15} />
+                <input
+                  value={chatSearch}
+                  placeholder="搜索历史对话"
+                  onChange={(event) => setChatSearch(event.target.value)}
+                />
+              </label>
+            </div>
+
+            {filteredChatSessions.length > 0 ? (
+              <div className="chat-session-list">
+                {filteredChatSessions.map((session) => (
+                  <button
+                    className={`chat-session ${session.id === currentChat?.id ? "chat-session-active" : ""}`}
+                    type="button"
+                    key={session.id}
+                    onClick={() => openChat(session.id)}
+                    title={session.title}
+                  >
+                    <strong>{session.title}</strong>
+                    <span>{formatChatTime(session.updatedAt)} · {chatPreview(session)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="chat-session-empty">没有找到相关历史。</div>
+            )}
+
+            <div className="chat-log" ref={chatLogRef}>
               {chatHistory.length === 0 ? <div className="empty">还没有对话。</div> : null}
               {chatHistory.map((item, index) => (
                 <div className={`chat-item chat-${item.role}`} key={`${item.role}-${index}`}>
@@ -502,6 +718,7 @@ export default function App() {
                   <span>{item.content}</span>
                 </div>
               ))}
+              {busy === "chat" && pendingChatId === currentChat?.id ? <ThinkingMessage /> : null}
             </div>
             <div className="send-row">
               <input
@@ -539,6 +756,22 @@ function Panel({ title, icon, children }: { title: string; icon: React.ReactNode
       </div>
       {children}
     </section>
+  );
+}
+
+function ThinkingMessage() {
+  return (
+    <div className="chat-item chat-assistant chat-thinking">
+      <strong>智能体</strong>
+      <span className="thinking-line">
+        正在思考
+        <span className="thinking-dots" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      </span>
+    </div>
   );
 }
 
