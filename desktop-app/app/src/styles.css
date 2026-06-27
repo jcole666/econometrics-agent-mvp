@@ -408,7 +408,12 @@ h1 {
 
 .rail-left .panel:nth-child(3) {
   flex: 1 0 auto;
-  min-height: 390px;
+  min-height: 350px;
+}
+
+.rail-left .panel:nth-child(2) textarea {
+  height: 96px;
+  min-height: 96px;
 }
 
 .rail-main .panel,
