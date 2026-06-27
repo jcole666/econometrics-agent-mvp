@@ -206,7 +206,7 @@ function installAppMenu() {
             await dialog.showMessageBox({
               type: "info",
               title: `关于 ${APP_TITLE}`,
-              message: "计量建模智能体研究工作台",
+              message: "计量建模小计研究工作台",
               detail: "本地运行的计量建模桌面工具。"
             });
           }

@@ -760,8 +760,119 @@ h1 {
   font-size: 12px;
 }
 
-.chat-item span {
+.chat-text,
+.chat-markdown p {
+  margin: 0;
   line-height: 1.45;
+}
+
+.chat-markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.chat-markdown .chat-heading-main,
+.chat-markdown .chat-heading {
+  margin: 4px 0 0;
+  color: var(--moss-dark);
+  line-height: 1.25;
+}
+
+.chat-markdown .chat-heading-main {
+  font-size: 15px;
+}
+
+.chat-markdown .chat-heading {
+  font-size: 14px;
+}
+
+.chat-markdown hr {
+  width: 100%;
+  height: 1px;
+  border: 0;
+  background: var(--line);
+  margin: 2px 0;
+}
+
+.chat-markdown code {
+  border: 1px solid #d9d1c0;
+  border-radius: 4px;
+  background: #f5f1e6;
+  color: #6e2f25;
+  padding: 1px 4px;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.chat-list li {
+  line-height: 1.45;
+}
+
+.chat-list-depth-1 {
+  margin-left: 14px;
+}
+
+.chat-list-depth-2,
+.chat-list-depth-3 {
+  margin-left: 26px;
+}
+
+.chat-code-block {
+  overflow: hidden;
+  border: 1px solid #2d3437;
+  border-radius: 6px;
+  background: var(--code);
+}
+
+.chat-code-head {
+  border-bottom: 1px solid #333b3f;
+  background: #22282b;
+  color: #b8c2bc;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.chat-code-block pre {
+  max-height: 260px;
+  padding: 10px;
+  color: #ecf0e8;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow: auto;
+}
+
+.chat-code-block code {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.chat-formula {
+  border-left: 3px solid var(--gold);
+  border-radius: 5px;
+  background: #fff7dc;
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+
+.chat-formula code {
+  border: 0;
+  background: transparent;
+  color: #5b3920;
+  padding: 0;
+  white-space: pre;
 }
 
 .chat-thinking {
