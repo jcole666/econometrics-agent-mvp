@@ -172,7 +172,7 @@ pre {
 .settings-button {
   position: absolute;
   top: 21px;
-  right: 72px;
+  right: clamp(96px, 22vw, 300px);
   z-index: 2;
   flex: 0 0 34px;
   border-color: var(--moss-dark);
