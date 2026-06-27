@@ -172,8 +172,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    return window.workbench?.onOpenModelSettings?.(() => openModelSettings());
-  }, [modelSettings]);
+    window.workbench?.onOpenModelSettings?.(() => {
+      setSettingsDraft(loadModelSettings());
+      setSettingsOpen(true);
+    });
+  }, []);
 
   function setVariablesFromInference(next: InferVariablesResponse) {
     setInference(next);

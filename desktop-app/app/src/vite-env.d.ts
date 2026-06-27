@@ -3,6 +3,6 @@
 interface Window {
   workbench?: {
     platform: string;
-    onOpenModelSettings?: (callback: () => void) => () => void;
+    onOpenModelSettings?: (callback: () => void) => void;
   };
 }
