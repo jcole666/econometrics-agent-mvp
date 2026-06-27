@@ -582,10 +582,25 @@ h1 {
   margin-top: 8px;
 }
 
+.report-actions {
+  display: grid;
+  grid-template-columns: 1fr 92px 100px;
+  gap: 8px;
+}
+
+.report-actions button {
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.question-input:focus::placeholder {
+  color: transparent;
+}
+
 .rail-right .panel:first-child {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .chat-tools {
@@ -598,6 +613,39 @@ h1 {
 .chat-new-button {
   min-width: 0;
   padding: 7px 8px;
+}
+
+.chat-history-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.chat-history-button {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.chat-history-button svg:last-child {
+  margin-left: auto;
+  transition: transform 0.14s ease;
+}
+
+.chat-history-open svg:last-child {
+  transform: rotate(180deg);
+}
+
+.chat-history-popover {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  z-index: 12;
+  width: min(318px, calc(100vw - 28px));
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 14px 32px rgba(37, 40, 43, 0.2);
+  padding: 9px;
 }
 
 .chat-search-field {
@@ -620,11 +668,11 @@ h1 {
 }
 
 .chat-session-list {
-  max-height: 96px;
+  max-height: 260px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-top: 8px;
   padding-right: 2px;
   overflow: auto;
 }
@@ -680,7 +728,7 @@ h1 {
   border-radius: 6px;
   background: #fffdf7;
   color: var(--muted);
-  margin-bottom: 8px;
+  margin-top: 8px;
   font-size: 12px;
 }
 

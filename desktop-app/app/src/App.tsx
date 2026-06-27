@@ -1,7 +1,9 @@
 import {
   Activity,
+  ChevronDown,
   Cpu,
   Database,
+  Download,
   FileText,
   FileUp,
   MessageSquare,
@@ -246,7 +248,7 @@ export default function App() {
   const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");
   const [file, setFile] = useState<File | null>(null);
   const [profile, setProfile] = useState<DataProfile | null>(null);
-  const [question, setQuestion] = useState(DEFAULT_QUESTION);
+  const [question, setQuestion] = useState("");
   const [columnsInput, setColumnsInput] = useState(DEFAULT_COLUMNS);
   const [dependentVariable, setDependentVariable] = useState("income");
   const [independentVariables, setIndependentVariables] = useState("education, experience, gender");
@@ -261,6 +263,7 @@ export default function App() {
   const [runResult, setRunResult] = useState<RunModelResponse | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatSearch, setChatSearch] = useState("");
+  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const [chatState, setChatState] = useState<ChatState>(() => loadChatState());
   const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [report, setReport] = useState("");
@@ -270,6 +273,7 @@ export default function App() {
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
   const chatLogRef = useRef<HTMLDivElement | null>(null);
+  const chatHistoryRef = useRef<HTMLDivElement | null>(null);
 
   const columns = useMemo(() => splitList(columnsInput), [columnsInput]);
   const llmConfig = useMemo(() => toLLMConfig(modelSettings), [modelSettings]);
@@ -311,6 +315,20 @@ export default function App() {
   }, [busy, currentChat?.id, chatHistory.length]);
 
   useEffect(() => {
+    if (!chatHistoryOpen) return;
+
+    const closeHistory = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !chatHistoryRef.current?.contains(target)) {
+        setChatHistoryOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", closeHistory);
+    return () => document.removeEventListener("mousedown", closeHistory);
+  }, [chatHistoryOpen]);
+
+  useEffect(() => {
     window.workbench?.onOpenModelSettings?.(() => {
       setSettingsDraft(loadModelSettings());
       setSettingsOpen(true);
@@ -328,9 +346,18 @@ export default function App() {
     setInstrumentVariable(next.instrument_variable ?? "");
   }
 
-  function buildRequest(): ModelRequest {
+  function requireResearchQuestion() {
+    const text = question.trim();
+    if (!text) {
+      setStatus("请先填写研究问题。");
+      return null;
+    }
+    return text;
+  }
+
+  function buildRequest(researchQuestion: string): ModelRequest {
     return {
-      research_question: question,
+      research_question: researchQuestion,
       columns,
       dependent_variable: dependentVariable || null,
       independent_variables: splitList(independentVariables),
@@ -407,7 +434,7 @@ export default function App() {
       const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
       setFile(sampleFile);
       setProfile(sampleProfile);
-      setQuestion(DEFAULT_QUESTION);
+      setQuestion("");
       setColumnsInput(sampleProfile.columns.map((column) => column.name).join(", "));
       setDependentVariable("income");
       setIndependentVariables("education, experience, gender");
@@ -421,10 +448,13 @@ export default function App() {
   }
 
   async function infer() {
+    const researchQuestion = requireResearchQuestion();
+    if (!researchQuestion) return;
+
     setBusy("infer");
     try {
       const next = await inferVariables({
-        research_question: question,
+        research_question: researchQuestion,
         columns: inferenceColumns(),
         llm_config: llmConfig
       });
@@ -438,9 +468,12 @@ export default function App() {
   }
 
   async function recommend() {
+    const researchQuestion = requireResearchQuestion();
+    if (!researchQuestion) return;
+
     setBusy("recommend");
     try {
-      const next = await recommendModel(buildRequest());
+      const next = await recommendModel(buildRequest(researchQuestion));
       setRecommendation(next);
       setModelType(next.model);
       setStatus("模型推荐已生成。");
@@ -456,9 +489,12 @@ export default function App() {
       setStatus("请先加载样例数据或选择一个数据文件。");
       return;
     }
+    const researchQuestion = requireResearchQuestion();
+    if (!researchQuestion) return;
+
     setBusy("run");
     try {
-      const next = await runModel(file, buildRequest(), modelType);
+      const next = await runModel(file, buildRequest(researchQuestion), modelType);
       setRunResult(next);
       setStatus(next.success ? "模型运行完成。" : next.error ?? "模型运行已停止。");
     } catch (error) {
@@ -487,6 +523,7 @@ export default function App() {
     if (currentChat && currentChat.messages.length === 0) {
       setChatInput("");
       setChatSearch("");
+      setChatHistoryOpen(false);
       setChatState((current) => ({ ...current, activeId: currentChat.id }));
       setStatus("已切换到空白会话。");
       return;
@@ -495,6 +532,7 @@ export default function App() {
     const session = createChatSession();
     setChatInput("");
     setChatSearch("");
+    setChatHistoryOpen(false);
     setChatState((current) => ({
       sessions: [session, ...current.sessions],
       activeId: session.id
@@ -504,6 +542,7 @@ export default function App() {
 
   function openChat(sessionId: string) {
     setChatInput("");
+    setChatHistoryOpen(false);
     setChatState((current) => ({ ...current, activeId: sessionId }));
     setStatus("已打开历史会话。");
   }
@@ -545,15 +584,92 @@ export default function App() {
   }
 
   async function makeReport() {
+    const researchQuestion = requireResearchQuestion();
+    if (!researchQuestion) return;
+
     setBusy("report");
     try {
-      const response = await generateReport(question, modelType, runResult?.results ?? null, inference?.reasoning, llmConfig);
+      const response = await generateReport(researchQuestion, modelType, runResult?.results ?? null, inference?.reasoning, llmConfig);
       setReport(response.markdown);
       setStatus("报告已生成。");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "报告生成失败。");
     } finally {
       setBusy(null);
+    }
+  }
+
+  function reportFileBase() {
+    const text = question.replace(/\s+/g, " ").trim();
+    if (!text) return "分析报告";
+    return text.length > 18 ? text.slice(0, 18) : text;
+  }
+
+  function downloadTextFile(fileName: string, content: string) {
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function showExportResult(result: SaveFileResult | undefined, label: string) {
+    if (!result) return;
+    if (result.ok) {
+      setStatus(result.filePath ? `${label}已导出：${result.filePath}` : `${label}已导出。`);
+      return;
+    }
+    if (result.canceled) {
+      setStatus("已取消导出。");
+      return;
+    }
+    setStatus(result.error || `${label}导出失败。`);
+  }
+
+  async function exportReportMd() {
+    if (!report.trim()) {
+      setStatus("请先生成报告。");
+      return;
+    }
+
+    const fileName = `${reportFileBase()}.md`;
+    try {
+      if (window.workbench?.saveTextFile) {
+        const result = await window.workbench.saveTextFile({ fileName, content: report });
+        showExportResult(result, "Markdown");
+      } else {
+        downloadTextFile(fileName, report);
+        setStatus("Markdown 已导出。");
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Markdown 导出失败。");
+    }
+  }
+
+  async function exportReportPdf() {
+    if (!report.trim()) {
+      setStatus("请先生成报告。");
+      return;
+    }
+
+    if (!window.workbench?.saveReportPdf) {
+      setStatus("PDF 导出需要在桌面应用中使用。");
+      return;
+    }
+
+    try {
+      const result = await window.workbench.saveReportPdf({
+        fileName: `${reportFileBase()}.pdf`,
+        title: question.trim() || "分析报告",
+        markdown: report
+      });
+      showExportResult(result, "PDF");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "PDF 导出失败。");
     }
   }
 
@@ -619,7 +735,13 @@ export default function App() {
           </Panel>
 
           <Panel title="研究问题" icon={<MessageSquare size={17} />}>
-            <textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={4} />
+            <textarea
+              className="question-input"
+              value={question}
+              placeholder={DEFAULT_QUESTION}
+              onChange={(event) => setQuestion(event.target.value)}
+              rows={4}
+            />
             <label>字段列表</label>
             <input value={columnsInput} onChange={(event) => setColumnsInput(event.target.value)} />
           </Panel>
@@ -681,34 +803,49 @@ export default function App() {
                 <Plus size={15} />
                 <span>新会话</span>
               </button>
-              <label className="chat-search-field" title="查找历史对话">
-                <Search size={15} />
-                <input
-                  value={chatSearch}
-                  placeholder="搜索历史对话"
-                  onChange={(event) => setChatSearch(event.target.value)}
-                />
-              </label>
-            </div>
-
-            {filteredChatSessions.length > 0 ? (
-              <div className="chat-session-list">
-                {filteredChatSessions.map((session) => (
-                  <button
-                    className={`chat-session ${session.id === currentChat?.id ? "chat-session-active" : ""}`}
-                    type="button"
-                    key={session.id}
-                    onClick={() => openChat(session.id)}
-                    title={session.title}
-                  >
-                    <strong>{session.title}</strong>
-                    <span>{formatChatTime(session.updatedAt)} · {chatPreview(session)}</span>
-                  </button>
-                ))}
+              <div className="chat-history-wrap" ref={chatHistoryRef}>
+                <button
+                  className={`secondary chat-history-button ${chatHistoryOpen ? "chat-history-open" : ""}`}
+                  type="button"
+                  onClick={() => setChatHistoryOpen((open) => !open)}
+                  title="查看历史对话"
+                >
+                  <Search size={15} />
+                  <span>历史对话</span>
+                  <ChevronDown size={14} />
+                </button>
+                {chatHistoryOpen ? (
+                  <div className="chat-history-popover">
+                    <label className="chat-search-field" title="查找历史对话">
+                      <Search size={15} />
+                      <input
+                        value={chatSearch}
+                        placeholder="搜索历史对话"
+                        onChange={(event) => setChatSearch(event.target.value)}
+                      />
+                    </label>
+                    {filteredChatSessions.length > 0 ? (
+                      <div className="chat-session-list">
+                        {filteredChatSessions.map((session) => (
+                          <button
+                            className={`chat-session ${session.id === currentChat?.id ? "chat-session-active" : ""}`}
+                            type="button"
+                            key={session.id}
+                            onClick={() => openChat(session.id)}
+                            title={session.title}
+                          >
+                            <strong>{session.title}</strong>
+                            <span>{formatChatTime(session.updatedAt)} · {chatPreview(session)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="chat-session-empty">没有找到相关历史。</div>
+                    )}
+                  </div>
+                ) : null}
               </div>
-            ) : (
-              <div className="chat-session-empty">没有找到相关历史。</div>
-            )}
+            </div>
 
             <div className="chat-log" ref={chatLogRef}>
               {chatHistory.length === 0 ? <div className="empty">还没有对话。</div> : null}
@@ -735,10 +872,20 @@ export default function App() {
           </Panel>
 
           <Panel title="分析报告" icon={<FileText size={17} />}>
-            <button className="wide" type="button" onClick={makeReport} disabled={busy === "report"}>
-              <FileText size={16} />
-              <span>生成报告</span>
-            </button>
+            <div className="report-actions">
+              <button type="button" onClick={makeReport} disabled={busy === "report"}>
+                <FileText size={16} />
+                <span>生成报告</span>
+              </button>
+              <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
+                <Download size={16} />
+                <span>导出 MD</span>
+              </button>
+              <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
+                <Download size={16} />
+                <span>导出 PDF</span>
+              </button>
+            </div>
             <pre className="report">{report || "尚未生成报告。"}</pre>
           </Panel>
         </aside>
