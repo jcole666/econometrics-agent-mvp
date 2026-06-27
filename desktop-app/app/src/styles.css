@@ -128,13 +128,14 @@ pre {
 }
 
 .topbar {
+  position: relative;
   height: 76px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--line-strong);
   background: var(--surface);
-  padding: 13px 18px;
+  padding: 13px 62px 13px 18px;
   overflow: hidden;
 }
 
@@ -169,7 +170,10 @@ pre {
 }
 
 .settings-button {
-  order: 2;
+  position: absolute;
+  top: 21px;
+  right: 18px;
+  z-index: 2;
   flex: 0 0 34px;
 }
 
