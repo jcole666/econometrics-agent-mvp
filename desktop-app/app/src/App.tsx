@@ -360,6 +360,15 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-actions">
+          <button
+            className={`icon-button settings-button ${modelSettings.enabled ? "settings-active" : ""}`}
+            type="button"
+            onClick={openModelSettings}
+            title="模型设置"
+            aria-label="模型设置"
+          >
+            <Settings size={18} />
+          </button>
           <div className="status-strip">
             <span className={`health health-${health}`} />
             <span>{health === "online" ? "后端服务在线" : health === "offline" ? "后端服务离线" : "正在检查后端"}</span>
@@ -369,15 +378,6 @@ export default function App() {
             <span className="status-text">{status}</span>
           </div>
         </div>
-        <button
-          className={`icon-button settings-button ${modelSettings.enabled ? "settings-active" : ""}`}
-          type="button"
-          onClick={openModelSettings}
-          title="模型设置"
-          aria-label="模型设置"
-        >
-          <Settings size={18} />
-        </button>
       </header>
 
       {settingsOpen ? (
