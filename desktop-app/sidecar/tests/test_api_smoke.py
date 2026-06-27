@@ -56,11 +56,11 @@ def test_disabled_llm_config_uses_rules() -> None:
     assert body["maas_used"] is False
 
 
-def test_chat_identity_explains_local_mode() -> None:
+def test_chat_requires_model_config() -> None:
     response = client.post(
         "/chat",
         json={
-            "message": "你是谁",
+            "message": "为什么推荐这个模型？",
             "history": [],
             "context": {"data_columns": []},
             "llm_config": {"enabled": False},
@@ -69,8 +69,9 @@ def test_chat_identity_explains_local_mode() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["provider"] == "rules"
-    assert "本地计量建模助手" in body["reply"]
+    assert body["provider"] == "model_error"
+    assert "API Key" in body["reply"]
+    assert "请求地址" in body["reply"]
 
 
 def test_ols_runner_returns_coefficients() -> None:

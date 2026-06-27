@@ -1,4 +1,4 @@
-export type Provider = "rules" | "huawei_maas" | "custom_model" | string;
+export type Provider = "rules" | "huawei_maas" | "custom_model" | "model_error" | string;
 
 export interface LLMConfig {
   enabled?: boolean | null;

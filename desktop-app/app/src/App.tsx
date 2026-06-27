@@ -119,11 +119,21 @@ function formatNumber(value: number | null | undefined): string {
 function providerLabel(provider: string | undefined): string {
   if (provider === "custom_model") return "自定义模型";
   if (provider === "huawei_maas") return "华为云 MaaS";
+  if (provider === "model_error") return "模型连接";
   return "本地规则";
 }
 
 function modelLabel(model: string | undefined): string {
   return MODEL_OPTIONS.find((item) => item.value === model)?.label ?? model ?? "";
+}
+
+function missingModelSettings(settings: ModelSettings): string[] {
+  const missing: string[] = [];
+  if (!settings.enabled) missing.push("启用自定义模型");
+  if (!settings.baseUrl.trim()) missing.push("请求地址");
+  if (!settings.model.trim()) missing.push("模型名称");
+  if (!settings.apiKey.trim()) missing.push("API Key");
+  return missing;
 }
 
 export default function App() {
@@ -319,6 +329,14 @@ export default function App() {
   async function sendChat() {
     const message = chatInput.trim();
     if (!message) return;
+
+    const missing = missingModelSettings(modelSettings);
+    if (missing.length > 0) {
+      setSettingsDraft({ ...modelSettings, enabled: true });
+      setSettingsOpen(true);
+      setStatus(`请先在右上角设置里补全：${missing.join("、")}。`);
+      return;
+    }
 
     const context = {
       data_columns: columns,

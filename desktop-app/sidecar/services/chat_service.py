@@ -10,16 +10,38 @@ CHAT_SYSTEM_PROMPT = """你是一个计量建模工作台助手。
 回答要围绕用户上传的数据、变量选择、模型推荐、生成代码和模型结果展开。
 用中文给出清楚、可执行的建模建议。"""
 
+CHAT_CONFIG_MESSAGE = "请先在右上角设置里补全模型配置，保存后再发送问题。"
+
 
 def chat_with_agent(request: ChatRequest) -> ChatResponse:
+    missing = _missing_model_config(request)
+    if missing:
+        message = f"{CHAT_CONFIG_MESSAGE}缺少：{'、'.join(missing)}。"
+        return ChatResponse(reply=message, provider="model_error", maas_error=message)
+
     try:
         reply = maas_chat(_build_messages(request), request.llm_config).strip()
         if reply:
             return ChatResponse(reply=reply, provider=llm_provider_name(request.llm_config))
     except MaasUnavailable as exc:
-        return ChatResponse(reply=_fallback_reply(request), provider="rules", maas_error=str(exc))
+        message = f"模型连接失败，请检查 API Key、请求地址、模型名称或网络。{exc}"
+        return ChatResponse(reply=message, provider="model_error", maas_error=str(exc))
 
-    return ChatResponse(reply=_fallback_reply(request), provider="rules")
+    return ChatResponse(reply="模型没有返回内容，请稍后重试。", provider=llm_provider_name(request.llm_config), maas_error="模型没有返回内容。")
+
+
+def _missing_model_config(request: ChatRequest) -> list[str]:
+    config = request.llm_config
+    missing: list[str] = []
+    if config is None or config.enabled is not True:
+        missing.append("启用自定义模型")
+    if config is None or not (config.base_url or "").strip():
+        missing.append("请求地址")
+    if config is None or not (config.model or "").strip():
+        missing.append("模型名称")
+    if config is None or not (config.api_key or "").strip():
+        missing.append("API Key")
+    return missing
 
 
 def _build_messages(request: ChatRequest) -> list[dict[str, str]]:
@@ -42,32 +64,3 @@ def _dump_context(request: ChatRequest) -> dict[str, Any]:
     if hasattr(request.context, "model_dump"):
         return request.context.model_dump(exclude_none=True)
     return request.context.dict(exclude_none=True)
-
-
-def _fallback_reply(request: ChatRequest) -> str:
-    text = request.message.lower()
-    context = request.context
-    model = context.recommended_model if context and context.recommended_model else "当前模型"
-    llm_disabled = bool(request.llm_config and request.llm_config.enabled is False)
-
-    if any(item in text for item in ["你是谁", "你是誰", "who are you", "what are you"]):
-        if llm_disabled:
-            return (
-                "我是这个桌面工作台里的本地计量建模助手。当前没有启用自定义大模型，所以我会用内置规则回答，"
-                "能帮你解释变量选择、模型推荐、代码和回归结果。需要更开放的对话，可以在右上角设置里填写模型、API Key 和请求地址。"
-            )
-        return "我是计量建模智能体助手，会结合你的数据、研究问题、模型推荐和回归结果，帮你完成建模分析。"
-    if any(item in text for item in ["没接上", "没有接上", "没听懂", "听不懂", "不像智能体", "api", "key"]):
-        return (
-            "现在如果回答比较固定，通常是因为还在使用本地规则，或者自定义模型配置不可用。"
-            "请点右上角设置，启用自定义模型，并填写请求地址、模型名称和 API Key。保存后，变量识别、模型推荐和问答都会带上这份配置。"
-        )
-
-    if "code" in text or "代码" in text:
-        return "当前生成的是可复现的 Python 建模模板。建议先核对 Y 和 X 是否选对，再检查缺失值、变量编码和稳健标准误，最后再把结果写进报告。"
-    if "result" in text or "coefficient" in text or "p-value" in text or "结果" in text or "系数" in text:
-        return "解读结果时先看核心解释变量的系数方向，再看 p 值或置信区间，最后把估计值翻译回你的研究问题。"
-    if "why" in text or "recommend" in text or "model" in text or "为什么" in text or "推荐" in text or "模型" in text:
-        return f"{model} 的推荐依据主要来自结果变量类型、研究问题表述和当前可用字段。正式使用前，最好再手动确认变量角色。"
-
-    return "我可以继续解释变量选择、模型推荐、生成代码和回归结果。你可以直接问：为什么推荐这个模型、系数怎么解读、下一步该检查什么。"
