@@ -6,11 +6,13 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $root
 $appDir = Join-Path $root "app"
 $sidecarDir = Join-Path $root "sidecar-dist\econometrics-sidecar"
 $sidecarExe = Join-Path $sidecarDir "econometrics-sidecar.exe"
 $packageJson = Get-Content (Join-Path $appDir "package.json") | ConvertFrom-Json
 $portableExe = Join-Path $appDir "release\Econometrics-Agent-Workbench-$($packageJson.version)-portable.exe"
+$rootLauncher = Join-Path $repoRoot "小计.exe"
 
 function Run($cmd, $cmdArgs, $cwd) {
     Push-Location $cwd
@@ -55,5 +57,9 @@ if (-not (Test-Path -LiteralPath $portableExe)) {
     throw "Portable executable was not found: $portableExe"
 }
 
+Copy-Item -LiteralPath $portableExe -Destination $rootLauncher -Force
+
 Write-Host "Built portable app:"
 Write-Host $portableExe
+Write-Host "Root launcher:"
+Write-Host $rootLauncher

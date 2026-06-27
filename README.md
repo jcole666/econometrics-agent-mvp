@@ -1,10 +1,39 @@
-# Econometrics Agent MVP
+# 小计：计量建模工作台
 
-计量建模桌面工具。主项目在 `desktop-app/`，最终产物是 Windows portable exe，双击即可启动。
+一个本地运行的计量建模桌面工具。日常使用不需要打开网页，也不需要进命令行。
+
+## 直接打开
+
+在项目根目录双击：
+
+```text
+小计.exe
+```
+
+如果根目录还没有这个文件，先运行一次打包脚本：
+
+```powershell
+.\package-windows.ps1
+```
+
+脚本会生成正式文件，并自动同步一份到根目录：
+
+```text
+小计.exe
+```
+
+原始打包产物仍保留在：
+
+```text
+desktop-app\app\release\Econometrics-Agent-Workbench-0.1.0-portable.exe
+```
+
+`小计.exe` 是本地生成文件，体积较大，不提交到 GitHub。
 
 ## 项目结构
 
 ```text
+小计.exe        本地生成的双击入口
 desktop-app/
   app/          Electron + React 桌面界面
   sidecar/      本地 Python 分析服务
@@ -22,9 +51,10 @@ docs/           架构说明
 .\package-windows.ps1
 ```
 
-生成结果：
+生成结果会放在两个位置：
 
 ```text
+小计.exe
 desktop-app\app\release\Econometrics-Agent-Workbench-0.1.0-portable.exe
 ```
 
