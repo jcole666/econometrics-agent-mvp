@@ -133,20 +133,22 @@ pre {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   border-bottom: 1px solid var(--line-strong);
   background: var(--surface);
-  padding: 13px 116px 13px 18px;
+  padding: 13px 18px;
   overflow: hidden;
 }
 
 .topbar-left {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
 .topbar-actions {
-  flex: 0 1 520px;
+  flex: 1 1 auto;
   justify-content: flex-end;
   display: flex;
   align-items: center;
@@ -170,10 +172,6 @@ pre {
 }
 
 .settings-button {
-  position: absolute;
-  top: 21px;
-  right: clamp(96px, 22vw, 300px);
-  z-index: 2;
   flex: 0 0 34px;
   border-color: var(--moss-dark);
   background: var(--moss);
@@ -206,6 +204,7 @@ h1 {
 }
 
 .status-strip {
+  flex: 0 1 430px;
   width: min(430px, 34vw);
   min-width: 0;
   display: grid;
