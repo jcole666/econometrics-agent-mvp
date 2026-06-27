@@ -48,6 +48,20 @@ def _fallback_reply(request: ChatRequest) -> str:
     text = request.message.lower()
     context = request.context
     model = context.recommended_model if context and context.recommended_model else "当前模型"
+    llm_disabled = bool(request.llm_config and request.llm_config.enabled is False)
+
+    if any(item in text for item in ["你是谁", "你是誰", "who are you", "what are you"]):
+        if llm_disabled:
+            return (
+                "我是这个桌面工作台里的本地计量建模助手。当前没有启用自定义大模型，所以我会用内置规则回答，"
+                "能帮你解释变量选择、模型推荐、代码和回归结果。需要更开放的对话，可以在右上角设置里填写模型、API Key 和请求地址。"
+            )
+        return "我是计量建模智能体助手，会结合你的数据、研究问题、模型推荐和回归结果，帮你完成建模分析。"
+    if any(item in text for item in ["没接上", "没有接上", "没听懂", "听不懂", "不像智能体", "api", "key"]):
+        return (
+            "现在如果回答比较固定，通常是因为还在使用本地规则，或者自定义模型配置不可用。"
+            "请点右上角设置，启用自定义模型，并填写请求地址、模型名称和 API Key。保存后，变量识别、模型推荐和问答都会带上这份配置。"
+        )
 
     if "code" in text or "代码" in text:
         return "当前生成的是可复现的 Python 建模模板。建议先核对 Y 和 X 是否选对，再检查缺失值、变量编码和稳健标准误，最后再把结果写进报告。"

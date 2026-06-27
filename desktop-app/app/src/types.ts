@@ -1,6 +1,7 @@
 export type Provider = "rules" | "huawei_maas" | "custom_model" | string;
 
 export interface LLMConfig {
+  enabled?: boolean | null;
   api_key?: string | null;
   base_url?: string | null;
   model?: string | null;

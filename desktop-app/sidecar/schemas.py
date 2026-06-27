@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class LLMConfig(BaseModel):
+    enabled: bool | None = Field(None, description="Whether model calls are enabled for this request.")
     api_key: str | None = Field(None, description="Temporary API key for this request.")
     base_url: str | None = Field(None, description="OpenAI-compatible API base URL.")
     model: str | None = Field(None, description="Model name.")

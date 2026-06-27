@@ -5,6 +5,7 @@ import type {
   DataProfile,
   InferVariablesRequest,
   InferVariablesResponse,
+  LLMConfig,
   ModelRecommendation,
   ModelRequest,
   ReportResponse,
@@ -81,11 +82,11 @@ export async function runModel(file: File, payload: ModelRequest, modelType: str
   return requestJson("/run-model", { method: "POST", body: form });
 }
 
-export async function chat(message: string, history: ChatMessage[], context: ChatContext): Promise<ChatResponse> {
+export async function chat(message: string, history: ChatMessage[], context: ChatContext, llmConfig?: LLMConfig | null): Promise<ChatResponse> {
   return requestJson("/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, history, context })
+    body: JSON.stringify({ message, history, context, llm_config: llmConfig ?? null })
   });
 }
 
@@ -93,7 +94,8 @@ export async function generateReport(
   researchQuestion: string,
   modelType: string,
   modelResults: RunModelResponse["results"] | null,
-  inferenceNotes?: string
+  inferenceNotes?: string,
+  llmConfig?: LLMConfig | null
 ): Promise<ReportResponse> {
   return requestJson("/generate-report", {
     method: "POST",
@@ -102,7 +104,8 @@ export async function generateReport(
       research_question: researchQuestion,
       model_type: modelType,
       model_results: modelResults,
-      inference_notes: inferenceNotes || null
+      inference_notes: inferenceNotes || null,
+      llm_config: llmConfig ?? null
     })
   });
 }

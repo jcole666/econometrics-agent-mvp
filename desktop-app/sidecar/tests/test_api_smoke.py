@@ -39,6 +39,40 @@ def test_variable_inference_for_wage_question() -> None:
     assert "education" in body["independent_variables"]
 
 
+def test_disabled_llm_config_uses_rules() -> None:
+    payload = {
+        "research_question": "Does education affect income?",
+        "columns": ["income", "education", "experience"],
+        "dependent_variable": "income",
+        "independent_variables": ["education", "experience"],
+        "llm_config": {"enabled": False},
+    }
+
+    response = client.post("/recommend-model", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "rules"
+    assert body["maas_used"] is False
+
+
+def test_chat_identity_explains_local_mode() -> None:
+    response = client.post(
+        "/chat",
+        json={
+            "message": "你是谁",
+            "history": [],
+            "context": {"data_columns": []},
+            "llm_config": {"enabled": False},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "rules"
+    assert "本地计量建模助手" in body["reply"]
+
+
 def test_ols_runner_returns_coefficients() -> None:
     with SAMPLE_PATH.open("rb") as handle:
         response = client.post(

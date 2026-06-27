@@ -81,6 +81,8 @@ def maas_chat(messages: list[dict[str, str]], llm_config: LLMConfig | None = Non
 def _get_config(llm_config: LLMConfig | None = None) -> MaasConfig:
     _load_local_env()
 
+    if llm_config and llm_config.enabled is False:
+        raise MaasUnavailable("模型服务已关闭，当前使用本地规则。")
     if _has_custom_config(llm_config):
         return _get_custom_config(llm_config)
     if _is_disabled(os.getenv("MAAS_ENABLED", "auto")):

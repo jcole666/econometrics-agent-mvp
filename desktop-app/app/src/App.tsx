@@ -7,10 +7,14 @@ import {
   MessageSquare,
   Play,
   RefreshCw,
+  RotateCcw,
+  Save,
   Send,
+  Settings,
   Sparkles,
   TableProperties,
-  Wand2
+  Wand2,
+  X
 } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 
@@ -30,6 +34,7 @@ import type {
   CoefficientResult,
   DataProfile,
   InferVariablesResponse,
+  LLMConfig,
   ModelRecommendation,
   ModelRequest,
   RunModelResponse
@@ -37,8 +42,18 @@ import type {
 
 const DEFAULT_QUESTION = "教育水平是否会在控制工作经验和性别后影响收入？";
 const DEFAULT_COLUMNS = "income, education, experience, gender";
+const CHAT_PLACEHOLDER = "为什么推荐这个模型？";
+const SETTINGS_KEY = "econometrics-agent.model-settings";
 
 type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample";
+
+interface ModelSettings {
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  timeout: string;
+}
 
 const MODEL_OPTIONS = [
   { value: "OLS", label: "OLS 线性回归" },
@@ -48,6 +63,44 @@ const MODEL_OPTIONS = [
   { value: "RDD", label: "RDD 断点回归" },
   { value: "IV-2SLS", label: "IV-2SLS 工具变量" }
 ];
+
+const DEFAULT_MODEL_SETTINGS: ModelSettings = {
+  enabled: false,
+  baseUrl: "https://api.modelarts-maas.com/openai/v1",
+  model: "deepseek-v4-pro-IckBJP",
+  apiKey: "",
+  timeout: "60"
+};
+
+function loadModelSettings(): ModelSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return DEFAULT_MODEL_SETTINGS;
+    const parsed = JSON.parse(raw) as Partial<ModelSettings>;
+    return {
+      ...DEFAULT_MODEL_SETTINGS,
+      ...parsed,
+      enabled: parsed.enabled === true
+    };
+  } catch {
+    return DEFAULT_MODEL_SETTINGS;
+  }
+}
+
+function toLLMConfig(settings: ModelSettings): LLMConfig {
+  if (!settings.enabled) {
+    return { enabled: false };
+  }
+
+  const timeout = Number(settings.timeout);
+  return {
+    enabled: true,
+    api_key: settings.apiKey.trim() || null,
+    base_url: settings.baseUrl.trim() || null,
+    model: settings.model.trim() || null,
+    timeout: Number.isFinite(timeout) && timeout > 0 ? timeout : null
+  };
+}
 
 function splitList(value: string): string[] {
   return value
@@ -90,13 +143,17 @@ export default function App() {
   const [recommendation, setRecommendation] = useState<ModelRecommendation | null>(null);
   const [modelType, setModelType] = useState("OLS");
   const [runResult, setRunResult] = useState<RunModelResponse | null>(null);
-  const [chatInput, setChatInput] = useState("为什么推荐这个模型？");
+  const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [report, setReport] = useState("");
   const [status, setStatus] = useState("就绪");
   const [busy, setBusy] = useState<BusyKey | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
+  const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
 
   const columns = useMemo(() => splitList(columnsInput), [columnsInput]);
+  const llmConfig = useMemo(() => toLLMConfig(modelSettings), [modelSettings]);
 
   useEffect(() => {
     getHealth()
@@ -125,8 +182,32 @@ export default function App() {
       time_column: timeColumn || null,
       treatment_column: treatmentColumn || null,
       running_variable: runningVariable || null,
-      instrument_variable: instrumentVariable || null
+      instrument_variable: instrumentVariable || null,
+      llm_config: llmConfig
     };
+  }
+
+  function updateModelSetting<K extends keyof ModelSettings>(key: K, value: ModelSettings[K]) {
+    setSettingsDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function openModelSettings() {
+    setSettingsDraft(modelSettings);
+    setSettingsOpen(true);
+  }
+
+  function saveModelSettings() {
+    setModelSettings(settingsDraft);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsDraft));
+    setSettingsOpen(false);
+    setStatus(settingsDraft.enabled ? "模型配置已保存。" : "已切换为本地规则。");
+  }
+
+  function resetModelSettings() {
+    localStorage.removeItem(SETTINGS_KEY);
+    setModelSettings(DEFAULT_MODEL_SETTINGS);
+    setSettingsDraft(DEFAULT_MODEL_SETTINGS);
+    setStatus("已恢复默认模型配置。");
   }
 
   function inferenceColumns() {
@@ -188,7 +269,8 @@ export default function App() {
     try {
       const next = await inferVariables({
         research_question: question,
-        columns: inferenceColumns()
+        columns: inferenceColumns(),
+        llm_config: llmConfig
       });
       setVariablesFromInference(next);
       setStatus("变量识别完成。");
@@ -245,9 +327,9 @@ export default function App() {
     setChatInput("");
     setBusy("chat");
     try {
-      const response = await chat(message, chatHistory.slice(-8), context);
+      const response = await chat(message, chatHistory.slice(-8), context, llmConfig);
       setChatHistory([...visibleHistory, { role: "assistant", content: response.reply }]);
-      setStatus(`回答来源：${providerLabel(response.provider)}。`);
+      setStatus(response.maas_error ? `回答来源：${providerLabel(response.provider)}。${response.maas_error}` : `回答来源：${providerLabel(response.provider)}。`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "问答失败。");
     } finally {
@@ -258,7 +340,7 @@ export default function App() {
   async function makeReport() {
     setBusy("report");
     try {
-      const response = await generateReport(question, modelType, runResult?.results ?? null, inference?.reasoning);
+      const response = await generateReport(question, modelType, runResult?.results ?? null, inference?.reasoning, llmConfig);
       setReport(response.markdown);
       setStatus("报告已生成。");
     } catch (error) {
@@ -271,16 +353,42 @@ export default function App() {
   return (
     <main className="shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">计量建模智能体</p>
-          <h1>研究工作台</h1>
+        <div className="topbar-left">
+          <div>
+            <p className="eyebrow">计量建模智能体</p>
+            <h1>研究工作台</h1>
+          </div>
         </div>
-        <div className="status-strip">
-          <span className={`health health-${health}`} />
-          <span>{health === "online" ? "后端服务在线" : health === "offline" ? "后端服务离线" : "正在检查后端"}</span>
-          <span className="status-text">{status}</span>
+        <div className="topbar-actions">
+          <button
+            className={`icon-button settings-button ${modelSettings.enabled ? "settings-active" : ""}`}
+            type="button"
+            onClick={openModelSettings}
+            title="模型设置"
+            aria-label="模型设置"
+          >
+            <Settings size={18} />
+          </button>
+          <div className="status-strip">
+            <span className={`health health-${health}`} />
+            <span>{health === "online" ? "后端服务在线" : health === "offline" ? "后端服务离线" : "正在检查后端"}</span>
+            <span className={`model-badge ${modelSettings.enabled ? "model-badge-on" : ""}`}>
+              {modelSettings.enabled ? modelSettings.model || "自定义模型" : "本地规则"}
+            </span>
+            <span className="status-text">{status}</span>
+          </div>
         </div>
       </header>
+
+      {settingsOpen ? (
+        <SettingsDialog
+          settings={settingsDraft}
+          onChange={updateModelSetting}
+          onSave={saveModelSettings}
+          onReset={resetModelSettings}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
 
       <section className="workspace">
         <aside className="rail rail-left">
@@ -371,7 +479,13 @@ export default function App() {
               ))}
             </div>
             <div className="send-row">
-              <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => event.key === "Enter" && sendChat()} />
+              <input
+                className="chat-input"
+                value={chatInput}
+                placeholder={CHAT_PLACEHOLDER}
+                onChange={(event) => setChatInput(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && sendChat()}
+              />
               <button type="button" onClick={sendChat} disabled={busy === "chat"} title="发送">
                 <Send size={16} />
               </button>
@@ -400,6 +514,95 @@ function Panel({ title, icon, children }: { title: string; icon: React.ReactNode
       </div>
       {children}
     </section>
+  );
+}
+
+function SettingsDialog({
+  settings,
+  onChange,
+  onSave,
+  onReset,
+  onClose
+}: {
+  settings: ModelSettings;
+  onChange: <K extends keyof ModelSettings>(key: K, value: ModelSettings[K]) => void;
+  onSave: () => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="settings-head">
+          <div>
+            <p className="eyebrow">模型连接</p>
+            <h2 id="settings-title">设置</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} title="关闭" aria-label="关闭">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="settings-switch">
+          <label className="toggle-field">
+            <input type="checkbox" checked={settings.enabled} onChange={(event) => onChange("enabled", event.target.checked)} />
+            <span>启用自定义模型</span>
+          </label>
+          <span className="settings-mode">{settings.enabled ? "自定义模型" : "本地规则"}</span>
+        </div>
+
+        <div className="settings-form">
+          <label className="field">
+            <span>请求地址</span>
+            <input
+              value={settings.baseUrl}
+              placeholder="https://api.example.com/v1"
+              onChange={(event) => onChange("baseUrl", event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>模型名称</span>
+            <input
+              value={settings.model}
+              placeholder="deepseek-chat"
+              onChange={(event) => onChange("model", event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>API Key</span>
+            <input
+              value={settings.apiKey}
+              type="password"
+              placeholder="sk-..."
+              onChange={(event) => onChange("apiKey", event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>超时秒数</span>
+            <input
+              value={settings.timeout}
+              min="5"
+              step="1"
+              type="number"
+              onChange={(event) => onChange("timeout", event.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="settings-note">配置仅保存在当前电脑；打开开关后生效。</div>
+
+        <div className="settings-actions">
+          <button className="secondary" type="button" onClick={onReset}>
+            <RotateCcw size={16} />
+            <span>恢复默认</span>
+          </button>
+          <button type="button" onClick={onSave}>
+            <Save size={16} />
+            <span>保存</span>
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
