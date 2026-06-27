@@ -161,6 +161,10 @@ export default function App() {
       .catch(() => setHealth("offline"));
   }, []);
 
+  useEffect(() => {
+    return window.workbench?.onOpenModelSettings?.(() => openModelSettings());
+  }, [modelSettings]);
+
   function setVariablesFromInference(next: InferVariablesResponse) {
     setInference(next);
     setDependentVariable(next.dependent_variable ?? "");

@@ -17,11 +17,43 @@ const APP_TITLE = "Econometrics Agent Workbench";
 let mainWindow: BrowserWindow | null = null;
 
 function installAppMenu() {
+  const openSettings = () => {
+    mainWindow?.webContents.send("open-model-settings");
+    mainWindow?.focus();
+  };
+
+  const checkLocalService = async () => {
+    const online = await checkSidecarHealth(1000);
+    await dialog.showMessageBox({
+      type: online ? "info" : "warning",
+      title: "本地服务",
+      message: online ? "本地分析服务正在运行。" : "本地分析服务未响应。",
+      detail: `服务端口：${SIDECAR_PORT}`
+    });
+  };
+
+  const viewSubmenu: MenuItemConstructorOptions[] = [
+    { label: "恢复默认缩放", role: "resetZoom" },
+    { label: "放大", role: "zoomIn" },
+    { label: "缩小", role: "zoomOut" },
+    { type: "separator" },
+    { label: "全屏", role: "togglefullscreen" }
+  ];
+
+  if (!app.isPackaged) {
+    viewSubmenu.push(
+      { type: "separator" },
+      { label: "重新加载", role: "reload" },
+      { label: "强制重新加载", role: "forceReload" },
+      { label: "开发者工具", role: "toggleDevTools" }
+    );
+  }
+
   const template: MenuItemConstructorOptions[] = [
     {
       label: "文件",
       submenu: [
-        { label: "关闭窗口", role: "close" },
+        { label: "模型设置", click: openSettings },
         { type: "separator" },
         { label: "退出", role: "quit" }
       ]
@@ -40,30 +72,13 @@ function installAppMenu() {
     },
     {
       label: "视图",
-      submenu: [
-        { label: "重新加载", role: "reload" },
-        { label: "强制重新加载", role: "forceReload" },
-        { label: "开发者工具", role: "toggleDevTools" },
-        { type: "separator" },
-        { label: "实际大小", role: "resetZoom" },
-        { label: "放大", role: "zoomIn" },
-        { label: "缩小", role: "zoomOut" },
-        { type: "separator" },
-        { label: "切换全屏", role: "togglefullscreen" }
-      ]
-    },
-    {
-      label: "窗口",
-      submenu: [
-        { label: "最小化", role: "minimize" },
-        { label: "缩放", role: "zoom" },
-        { type: "separator" },
-        { label: "关闭", role: "close" }
-      ]
+      submenu: viewSubmenu
     },
     {
       label: "帮助",
       submenu: [
+        { label: "检查本地服务", click: checkLocalService },
+        { type: "separator" },
         {
           label: "关于",
           click: async () => {
