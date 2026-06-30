@@ -48,6 +48,10 @@ const DEFAULT_QUESTION = "教育水平是否会在控制工作经验和性别后
 const DEFAULT_COLUMNS = "income, education, experience, gender";
 const DEFAULT_DEPENDENT_VARIABLE = "income";
 const DEFAULT_INDEPENDENT_VARIABLES = "education, experience, gender";
+const QUESTION_PLACEHOLDER = `例如：${DEFAULT_QUESTION}`;
+const COLUMNS_PLACEHOLDER = `例如：${DEFAULT_COLUMNS}`;
+const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${DEFAULT_DEPENDENT_VARIABLE}`;
+const INDEPENDENT_VARIABLES_PLACEHOLDER = `例如：${DEFAULT_INDEPENDENT_VARIABLES}`;
 const CHAT_PLACEHOLDER = "为什么推荐这个模型？";
 const SETTINGS_KEY = "econometrics-agent.model-settings";
 const CHAT_SESSIONS_KEY = "econometrics-agent.chat-sessions";
@@ -894,7 +898,7 @@ export default function App() {
             <textarea
               className="question-input"
               value={question}
-              placeholder={DEFAULT_QUESTION}
+              placeholder={QUESTION_PLACEHOLDER}
               onChange={(event) => setQuestion(event.target.value)}
               rows={4}
             />
@@ -902,7 +906,7 @@ export default function App() {
             <input
               className="columns-input"
               value={columnsInput}
-              placeholder={DEFAULT_COLUMNS}
+              placeholder={COLUMNS_PLACEHOLDER}
               onChange={(event) => setColumnsInput(event.target.value)}
             />
           </Panel>
@@ -922,14 +926,14 @@ export default function App() {
             <input
               className="dependent-input"
               value={dependentVariable}
-              placeholder={DEFAULT_DEPENDENT_VARIABLE}
+              placeholder={DEPENDENT_VARIABLE_PLACEHOLDER}
               onChange={(event) => setDependentVariable(event.target.value)}
             />
             <label>解释变量 X</label>
             <input
               className="independent-input"
               value={independentVariables}
-              placeholder={DEFAULT_INDEPENDENT_VARIABLES}
+              placeholder={INDEPENDENT_VARIABLES_PLACEHOLDER}
               onChange={(event) => setIndependentVariables(event.target.value)}
             />
             <div className="mini-grid">
