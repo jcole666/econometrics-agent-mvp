@@ -4,7 +4,7 @@
   --butter: #fffecb;
   --mint: #ddf7b8;
   --aqua: #a7dde3;
-  --page: #f8f1e8;
+  --page: #fffecb;
   --surface: #fffefa;
   --surface-2: #fffed2;
   --surface-3: #f1ffd9;
@@ -52,20 +52,7 @@ body {
   min-width: 1040px;
   min-height: 100vh;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at 12% 10%, rgba(247, 196, 216, 0.42), transparent 26%),
-    radial-gradient(circle at 88% 16%, rgba(167, 221, 227, 0.52), transparent 28%),
-    linear-gradient(180deg,
-      rgba(247, 196, 216, 0.5) 0%,
-      rgba(247, 196, 216, 0.5) 18%,
-      rgba(255, 254, 203, 0.62) 18%,
-      rgba(255, 254, 203, 0.62) 48%,
-      rgba(221, 247, 184, 0.56) 48%,
-      rgba(221, 247, 184, 0.56) 72%,
-      rgba(167, 221, 227, 0.62) 72%,
-      rgba(167, 221, 227, 0.62) 100%),
-    linear-gradient(90deg, rgba(40, 50, 53, 0.035) 1px, transparent 1px);
-  background-size: auto, auto, auto, 36px 36px;
+  background: var(--page);
   color: var(--ink);
 }
 
@@ -85,7 +72,7 @@ button {
   gap: 7px;
   border: 1px solid #6fb8bf;
   border-radius: 6px;
-  background: linear-gradient(180deg, #b7eaf0, #ddf7b8);
+  background: var(--aqua);
   color: #24383b;
   padding: 7px 11px;
   cursor: pointer;
@@ -95,7 +82,7 @@ button {
 
 button:hover:not(:disabled) {
   border-color: #4faab3;
-  background: linear-gradient(180deg, #a7dde3, #d3f4a9);
+  background: var(--mint);
 }
 
 button:disabled {
@@ -193,9 +180,7 @@ pre {
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px solid rgba(169, 203, 208, 0.82);
-  background:
-    linear-gradient(90deg, rgba(255, 254, 203, 0.84), rgba(255, 254, 250, 0.94) 42%, rgba(167, 221, 227, 0.62)),
-    rgba(255, 254, 250, 0.9);
+  background: var(--aqua);
   padding: 13px 18px;
   overflow: hidden;
   box-shadow: 0 12px 24px rgba(87, 99, 101, 0.1);
@@ -238,19 +223,19 @@ pre {
 .settings-button {
   flex: 0 0 34px;
   border-color: #6fb8bf;
-  background: linear-gradient(180deg, var(--aqua), var(--mint));
+  background: var(--surface);
   color: #24383b;
 }
 
 .settings-active {
   border-color: var(--rust);
-  background: linear-gradient(180deg, var(--pink), var(--aqua));
+  background: var(--pink);
   color: #24383b;
 }
 
 .settings-button:hover:not(:disabled) {
   border-color: var(--rust);
-  background: linear-gradient(180deg, #f7c4d8, #a7dde3);
+  background: var(--pink);
   color: #24383b;
 }
 
@@ -278,7 +263,7 @@ h1 {
   gap: 9px;
   border: 1px solid rgba(169, 203, 208, 0.8);
   border-radius: 6px;
-  background: rgba(255, 254, 250, 0.74);
+  background: var(--surface);
   padding: 8px 10px;
   color: var(--muted);
   font-size: 12px;
@@ -344,7 +329,7 @@ h1 {
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
-  background: rgba(40, 50, 53, 0.28);
+  background: var(--pink);
   padding: 72px 18px 0 0;
 }
 
@@ -352,9 +337,7 @@ h1 {
   width: min(430px, calc(100vw - 36px));
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 254, 203, 0.35), rgba(255, 254, 250, 0.96) 26%),
-    var(--surface);
+  background: var(--surface);
   box-shadow: 0 22px 50px rgba(87, 99, 101, 0.2);
   padding: 14px;
 }
@@ -464,9 +447,7 @@ h1 {
   min-height: 0;
   border: 1px solid rgba(169, 203, 208, 0.84);
   border-radius: 6px;
-  background:
-    linear-gradient(180deg, rgba(255, 254, 250, 0.9), rgba(255, 254, 250, 0.7)),
-    var(--surface);
+  background: var(--surface);
   padding: 11px;
   overflow: auto;
   box-shadow: 0 16px 34px var(--shadow);
@@ -587,7 +568,7 @@ h1 {
   border: 1px dashed var(--line);
   border-radius: 6px;
   color: var(--muted);
-  background: rgba(255, 254, 250, 0.72);
+  background: var(--surface);
   text-align: center;
 }
 
