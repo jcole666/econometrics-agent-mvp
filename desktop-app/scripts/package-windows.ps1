@@ -12,7 +12,8 @@ $sidecarDir = Join-Path $root "sidecar-dist\econometrics-sidecar"
 $sidecarExe = Join-Path $sidecarDir "econometrics-sidecar.exe"
 $packageJson = Get-Content (Join-Path $appDir "package.json") | ConvertFrom-Json
 $portableExe = Join-Path $appDir "release\Econometrics-Agent-Workbench-$($packageJson.version)-portable.exe"
-$rootLauncher = Join-Path $repoRoot "小计.exe"
+$rootLauncherName = [string]([char]0x5C0F) + [string]([char]0x8BA1) + ".exe"
+$rootLauncher = Join-Path $repoRoot $rootLauncherName
 
 function Run($cmd, $cmdArgs, $cwd) {
     Push-Location $cwd

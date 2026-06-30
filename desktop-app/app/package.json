@@ -51,6 +51,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "../../docs/user-guide.md",
+        "to": "docs/user-guide.md"
       }
     ],
     "win": {

@@ -382,6 +382,14 @@ function renderInline(text: string) {
   });
 }
 
+function dataFileType(fileName: string) {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".csv")) return "text/csv";
+  if (lower.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (lower.endsWith(".xls")) return "application/vnd.ms-excel";
+  return "application/octet-stream";
+}
+
 export default function App() {
   const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");
   const [file, setFile] = useState<File | null>(null);
@@ -470,6 +478,14 @@ export default function App() {
     window.workbench?.onOpenModelSettings?.(() => {
       setSettingsDraft(loadModelSettings());
       setSettingsOpen(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    window.workbench?.onDataFileSelected?.((payload) => {
+      const next = new File([payload.data], payload.name, { type: dataFileType(payload.name) });
+      setFile(next);
+      setStatus(`已选择 ${payload.name}`);
     });
   }, []);
 

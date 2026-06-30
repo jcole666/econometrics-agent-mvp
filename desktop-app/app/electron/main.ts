@@ -28,6 +28,11 @@ interface SavePdfPayload {
   markdown?: string;
 }
 
+interface DataFilePayload {
+  name: string;
+  data: ArrayBuffer;
+}
+
 function fileName(value: string | undefined, fallback: string) {
   const clean = (value || fallback).replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim();
   return clean || fallback;
@@ -69,6 +74,147 @@ function reportHtml(title: string, markdown: string) {
 <body>
   <h1>${escapeHtml(title)}</h1>
   <pre>${escapeHtml(markdown)}</pre>
+</body>
+</html>`;
+}
+
+function userGuidePath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "docs", "user-guide.md");
+  }
+  return path.join(__dirname, "..", "..", "..", "..", "docs", "user-guide.md");
+}
+
+function guideMarkdownToHtml(markdown: string) {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const html: string[] = [];
+  let inList = false;
+  let inCode = false;
+  const codeLines: string[] = [];
+
+  const closeList = () => {
+    if (inList) {
+      html.push("</ul>");
+      inList = false;
+    }
+  };
+
+  for (const line of lines) {
+    const text = line.trim();
+
+    if (text.startsWith("```")) {
+      if (inCode) {
+        html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+        codeLines.length = 0;
+        inCode = false;
+      } else {
+        closeList();
+        inCode = true;
+      }
+      continue;
+    }
+
+    if (inCode) {
+      codeLines.push(line);
+      continue;
+    }
+
+    if (!text) {
+      closeList();
+      continue;
+    }
+
+    const heading = text.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      html.push(`<h${heading[1].length}>${escapeHtml(heading[2])}</h${heading[1].length}>`);
+      continue;
+    }
+
+    const item = text.match(/^[-*]\s+(.+)$/);
+    if (item) {
+      if (!inList) {
+        html.push("<ul>");
+        inList = true;
+      }
+      html.push(`<li>${escapeHtml(item[1])}</li>`);
+      continue;
+    }
+
+    closeList();
+    html.push(`<p>${escapeHtml(text)}</p>`);
+  }
+
+  closeList();
+  return html.join("\n");
+}
+
+function guideHtml(markdown: string) {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>小计使用文档</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --page: #0f1214;
+      --panel: #171b1f;
+      --ink: #f1efe7;
+      --muted: #aeb7b2;
+      --line: #303a3f;
+      --accent: #38c98f;
+      --gold: #d8ad50;
+    }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+      line-height: 1.7;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 34px 42px 46px;
+    }
+    h1 {
+      margin: 0 0 18px;
+      color: var(--accent);
+      font-size: 28px;
+    }
+    h2 {
+      margin: 28px 0 12px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 8px;
+      color: var(--gold);
+      font-size: 20px;
+    }
+    h3 {
+      margin: 20px 0 8px;
+      color: var(--ink);
+      font-size: 16px;
+    }
+    p, li {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    pre {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--panel);
+      padding: 12px;
+    }
+    code {
+      color: #dce7df;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main>${guideMarkdownToHtml(markdown)}</main>
 </body>
 </html>`;
 }
@@ -138,9 +284,58 @@ function installIpcHandlers() {
 }
 
 function installAppMenu() {
+  const chooseDataFile = async () => {
+    if (!mainWindow) return;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "选择数据文件",
+      properties: ["openFile"],
+      filters: [
+        { name: "数据文件", extensions: ["csv", "xlsx", "xls"] },
+        { name: "所有文件", extensions: ["*"] }
+      ]
+    });
+
+    if (result.canceled || result.filePaths.length === 0) return;
+
+    const filePath = result.filePaths[0];
+    const data = await fs.readFile(filePath);
+    const payload: DataFilePayload = {
+      name: path.basename(filePath),
+      data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+    };
+    mainWindow.webContents.send("data-file-selected", payload);
+    mainWindow.focus();
+  };
+
   const openSettings = () => {
     mainWindow?.webContents.send("open-model-settings");
     mainWindow?.focus();
+  };
+
+  const openUserGuide = async () => {
+    try {
+      const markdown = await fs.readFile(userGuidePath(), "utf8");
+      const guideWindow = new BrowserWindow({
+        width: 980,
+        height: 760,
+        minWidth: 760,
+        minHeight: 560,
+        backgroundColor: "#0f1214",
+        title: "小计使用文档",
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      });
+      await guideWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(guideHtml(markdown))}`);
+    } catch (error) {
+      await dialog.showMessageBox({
+        type: "warning",
+        title: "使用文档",
+        message: "暂时无法打开使用文档。",
+        detail: error instanceof Error ? error.message : String(error)
+      });
+    }
   };
 
   const checkLocalService = async () => {
@@ -174,6 +369,8 @@ function installAppMenu() {
     {
       label: "文件",
       submenu: [
+        { label: "选择数据文件", accelerator: "CmdOrCtrl+O", click: chooseDataFile },
+        { type: "separator" },
         { label: "模型设置", click: openSettings },
         { type: "separator" },
         { label: "退出", role: "quit" }
@@ -198,6 +395,8 @@ function installAppMenu() {
     {
       label: "帮助",
       submenu: [
+        { label: "使用文档", click: openUserGuide },
+        { type: "separator" },
         { label: "检查本地服务", click: checkLocalService },
         { type: "separator" },
         {

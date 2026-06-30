@@ -62,6 +62,8 @@ desktop-app\app\release\Econometrics-Agent-Workbench-0.1.0-portable.exe
 
 开发细节见 `desktop-app/README.md`。
 
+使用说明见 `docs/user-guide.md`，也可以在软件顶部菜单点击“帮助” -> “使用文档”。
+
 常用检查：
 
 ```powershell
