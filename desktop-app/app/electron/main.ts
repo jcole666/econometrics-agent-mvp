@@ -158,17 +158,23 @@ function guideHtml(markdown: string) {
   <style>
     :root {
       color-scheme: light;
-      --page: #eef2ef;
-      --panel: #ffffff;
-      --ink: #202724;
-      --muted: #65716c;
-      --line: #d4dfd8;
-      --accent: #2f8067;
-      --gold: #b98a2f;
+      --pink: #f7c4d8;
+      --butter: #fffecb;
+      --mint: #ddf7b8;
+      --aqua: #a7dde3;
+      --page: #f8f1e8;
+      --panel: #fffefa;
+      --ink: #283235;
+      --muted: #697275;
+      --line: #d9d6c5;
+      --accent: #2f7078;
+      --gold: #d0a548;
     }
     body {
       margin: 0;
-      background: var(--page);
+      background:
+        linear-gradient(180deg, rgba(247, 196, 216, 0.46), rgba(255, 254, 203, 0.62) 42%, rgba(221, 247, 184, 0.46) 72%, rgba(167, 221, 227, 0.56)),
+        var(--page);
       color: var(--ink);
       font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
       line-height: 1.7;
@@ -177,6 +183,8 @@ function guideHtml(markdown: string) {
       max-width: 920px;
       margin: 0 auto;
       padding: 34px 42px 46px;
+      background: rgba(255, 254, 250, 0.76);
+      min-height: 100vh;
     }
     h1 {
       margin: 0 0 18px;
@@ -320,7 +328,7 @@ function installAppMenu() {
         height: 760,
         minWidth: 760,
         minHeight: 560,
-        backgroundColor: "#eef2ef",
+        backgroundColor: "#f8f1e8",
         title: "小计使用文档",
         webPreferences: {
           nodeIntegration: false,
@@ -432,7 +440,7 @@ function createWindow() {
     height: 920,
     minWidth: 1040,
     minHeight: 720,
-    backgroundColor: "#ece9df",
+    backgroundColor: "#f8f1e8",
     title: APP_TITLE,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
