@@ -411,8 +411,10 @@ export default function App() {
   const [instrumentVariable, setInstrumentVariable] = useState("");
   const [inference, setInference] = useState<InferVariablesResponse | null>(null);
   const [recommendation, setRecommendation] = useState<ModelRecommendation | null>(null);
+  const [recommendationNotice, setRecommendationNotice] = useState<string | null>(null);
   const [modelType, setModelType] = useState("OLS");
   const [runResult, setRunResult] = useState<RunModelResponse | null>(null);
+  const [runNotice, setRunNotice] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatSearch, setChatSearch] = useState("");
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
@@ -491,6 +493,7 @@ export default function App() {
     window.workbench?.onDataFileSelected?.((payload) => {
       const next = new File([payload.data], payload.name, { type: dataFileType(payload.name) });
       setFile(next);
+      setRunNotice(null);
       setStatus(`已选择 ${payload.name}`);
     });
   }, []);
@@ -567,7 +570,14 @@ export default function App() {
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const next = event.target.files?.[0] ?? null;
     setFile(next);
+    setRunNotice(null);
     setStatus(next ? `已选择 ${next.name}` : "就绪");
+  }
+
+  function updateQuestion(value: string) {
+    setQuestion(value);
+    setRecommendationNotice(null);
+    setRunNotice(null);
   }
 
   async function loadProfile() {
@@ -595,6 +605,8 @@ export default function App() {
       setFile(sampleFile);
       setProfile(sampleProfile);
       setQuestion("");
+      setRecommendationNotice(null);
+      setRunNotice(null);
       setColumnsInput(sampleProfile.columns.map((column) => column.name).join(", "));
       setDependentVariable("");
       setIndependentVariables("");
@@ -629,16 +641,22 @@ export default function App() {
 
   async function recommend() {
     const researchQuestion = requireResearchQuestion();
-    if (!researchQuestion) return;
+    if (!researchQuestion) {
+      setRecommendationNotice("请先填写研究问题，再生成模型推荐。");
+      return;
+    }
 
     setBusy("recommend");
+    setRecommendationNotice(null);
     try {
       const next = await recommendModel(buildRequest(researchQuestion));
       setRecommendation(next);
       setModelType(next.model);
       setStatus("模型推荐已生成。");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "模型推荐失败。");
+      const message = error instanceof Error ? error.message : "模型推荐失败。";
+      setRecommendationNotice(message);
+      setStatus(message);
     } finally {
       setBusy(null);
     }
@@ -646,19 +664,27 @@ export default function App() {
 
   async function run() {
     if (!file) {
-      setStatus("请先加载样例数据或选择一个数据文件。");
+      const message = "请先加载样例数据或选择一个数据文件，模型结果需要真实数据才能计算。";
+      setRunNotice(message);
+      setStatus(message);
       return;
     }
     const researchQuestion = requireResearchQuestion();
-    if (!researchQuestion) return;
+    if (!researchQuestion) {
+      setRunNotice("请先填写研究问题，再运行模型。");
+      return;
+    }
 
     setBusy("run");
+    setRunNotice(null);
     try {
       const next = await runModel(file, buildRequest(researchQuestion), modelType);
       setRunResult(next);
       setStatus(next.success ? "模型运行完成。" : next.error ?? "模型运行已停止。");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "模型运行失败。");
+      const message = error instanceof Error ? error.message : "模型运行失败。";
+      setRunNotice(message);
+      setStatus(message);
     } finally {
       setBusy(null);
     }
@@ -899,7 +925,7 @@ export default function App() {
               className="question-input"
               value={question}
               placeholder={QUESTION_PLACEHOLDER}
-              onChange={(event) => setQuestion(event.target.value)}
+              onChange={(event) => updateQuestion(event.target.value)}
               rows={4}
             />
             <label>字段列表</label>
@@ -963,11 +989,11 @@ export default function App() {
                 <span>运行模型</span>
               </button>
             </div>
-            <RecommendationView recommendation={recommendation} />
+            <RecommendationView recommendation={recommendation} notice={recommendationNotice} />
           </Panel>
 
           <Panel title="模型结果" icon={<Activity size={17} />}>
-            <RunResultView result={runResult} />
+            <RunResultView result={runResult} notice={runNotice} />
           </Panel>
         </section>
 
@@ -1280,9 +1306,19 @@ function ProfileTable({ profile }: { profile: DataProfile | null }) {
   );
 }
 
-function RecommendationView({ recommendation }: { recommendation: ModelRecommendation | null }) {
+function RecommendationView({
+  recommendation,
+  notice
+}: {
+  recommendation: ModelRecommendation | null;
+  notice: string | null;
+}) {
+  if (notice) {
+    return <div className="empty">{notice}</div>;
+  }
+
   if (!recommendation) {
-    return <div className="empty">尚未生成模型推荐。</div>;
+    return <div className="empty">模型推荐会给出适合的模型、推荐理由、检查清单和可运行代码。</div>;
   }
 
   return (
@@ -1304,9 +1340,13 @@ function RecommendationView({ recommendation }: { recommendation: ModelRecommend
   );
 }
 
-function RunResultView({ result }: { result: RunModelResponse | null }) {
+function RunResultView({ result, notice }: { result: RunModelResponse | null; notice: string | null }) {
+  if (notice) {
+    return <div className="empty">{notice}</div>;
+  }
+
   if (!result) {
-    return <div className="empty">尚未运行模型。</div>;
+    return <div className="empty">模型结果会显示样本量、R2、系数、标准误、统计量和 p 值。</div>;
   }
   if (!result.success || !result.results) {
     return <div className="empty">{result.error ?? "模型没有返回结果。"}</div>;
