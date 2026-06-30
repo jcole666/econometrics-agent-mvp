@@ -655,7 +655,9 @@ h1 {
 }
 
 .question-input:focus::placeholder,
-.columns-input:focus::placeholder {
+.columns-input:focus::placeholder,
+.dependent-input:focus::placeholder,
+.independent-input:focus::placeholder {
   color: transparent;
 }
 

@@ -46,6 +46,8 @@ import type {
 
 const DEFAULT_QUESTION = "教育水平是否会在控制工作经验和性别后影响收入？";
 const DEFAULT_COLUMNS = "income, education, experience, gender";
+const DEFAULT_DEPENDENT_VARIABLE = "income";
+const DEFAULT_INDEPENDENT_VARIABLES = "education, experience, gender";
 const CHAT_PLACEHOLDER = "为什么推荐这个模型？";
 const SETTINGS_KEY = "econometrics-agent.model-settings";
 const CHAT_SESSIONS_KEY = "econometrics-agent.chat-sessions";
@@ -396,8 +398,8 @@ export default function App() {
   const [profile, setProfile] = useState<DataProfile | null>(null);
   const [question, setQuestion] = useState("");
   const [columnsInput, setColumnsInput] = useState("");
-  const [dependentVariable, setDependentVariable] = useState("income");
-  const [independentVariables, setIndependentVariables] = useState("education, experience, gender");
+  const [dependentVariable, setDependentVariable] = useState("");
+  const [independentVariables, setIndependentVariables] = useState("");
   const [entityColumn, setEntityColumn] = useState("");
   const [timeColumn, setTimeColumn] = useState("");
   const [treatmentColumn, setTreatmentColumn] = useState("");
@@ -513,8 +515,8 @@ export default function App() {
     return {
       research_question: researchQuestion,
       columns,
-      dependent_variable: dependentVariable || null,
-      independent_variables: splitList(independentVariables),
+      dependent_variable: dependentVariable.trim() || DEFAULT_DEPENDENT_VARIABLE,
+      independent_variables: splitList(independentVariables.trim() ? independentVariables : DEFAULT_INDEPENDENT_VARIABLES),
       entity_column: entityColumn || null,
       time_column: timeColumn || null,
       treatment_column: treatmentColumn || null,
@@ -590,8 +592,8 @@ export default function App() {
       setProfile(sampleProfile);
       setQuestion("");
       setColumnsInput(sampleProfile.columns.map((column) => column.name).join(", "));
-      setDependentVariable("income");
-      setIndependentVariables("education, experience, gender");
+      setDependentVariable("");
+      setIndependentVariables("");
       setModelType("OLS");
       setStatus("样例数据已加载。");
     } catch (error) {
@@ -917,9 +919,19 @@ export default function App() {
               </button>
             </div>
             <label>被解释变量 Y</label>
-            <input value={dependentVariable} onChange={(event) => setDependentVariable(event.target.value)} />
+            <input
+              className="dependent-input"
+              value={dependentVariable}
+              placeholder={DEFAULT_DEPENDENT_VARIABLE}
+              onChange={(event) => setDependentVariable(event.target.value)}
+            />
             <label>解释变量 X</label>
-            <input value={independentVariables} onChange={(event) => setIndependentVariables(event.target.value)} />
+            <input
+              className="independent-input"
+              value={independentVariables}
+              placeholder={DEFAULT_INDEPENDENT_VARIABLES}
+              onChange={(event) => setIndependentVariables(event.target.value)}
+            />
             <div className="mini-grid">
               <Input label="个体列" value={entityColumn} onChange={setEntityColumn} />
               <Input label="时间列" value={timeColumn} onChange={setTimeColumn} />
