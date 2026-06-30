@@ -1,15 +1,15 @@
 :root {
   color-scheme: light;
-  --page: #eef2ef;
+  --page: #eef3f6;
   --surface: #ffffff;
-  --surface-2: #edf3ef;
-  --surface-3: #f7f9f6;
+  --surface-2: #edf3f6;
+  --surface-3: #f7f9fa;
   --ink: #202724;
   --muted: #65716c;
-  --line: #d4dfd8;
-  --line-strong: #a8b8b0;
-  --moss: #2f8067;
-  --moss-dark: #1f5b49;
+  --line: #d4dde2;
+  --line-strong: #a7b7c0;
+  --moss: #3f6f8f;
+  --moss-dark: #294d63;
   --rust: #a64d45;
   --gold: #b98a2f;
   --graphite: #1f2528;
@@ -49,9 +49,9 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   background:
-    linear-gradient(90deg, rgba(47, 128, 103, 0.055) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(47, 128, 103, 0.04) 1px, transparent 1px),
-    linear-gradient(145deg, #f6f8f5 0%, #eef2ef 48%, #e6ece8 100%);
+    linear-gradient(90deg, rgba(63, 111, 143, 0.055) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(63, 111, 143, 0.04) 1px, transparent 1px),
+    linear-gradient(145deg, #f6f8fa 0%, #eef3f6 48%, #e6edf1 100%);
   background-size: 34px 34px, 34px 34px, auto;
   color: var(--ink);
 }
@@ -72,17 +72,17 @@ button {
   gap: 7px;
   border: 1px solid var(--moss-dark);
   border-radius: 6px;
-  background: linear-gradient(180deg, #337f69, #24644f);
+  background: linear-gradient(180deg, #477b9c, #315f79);
   color: #fff;
   padding: 7px 11px;
   cursor: pointer;
   font-weight: 800;
-  box-shadow: 0 8px 18px rgba(31, 91, 73, 0.13);
+  box-shadow: 0 8px 18px rgba(41, 77, 99, 0.13);
 }
 
 button:hover:not(:disabled) {
-  border-color: #174637;
-  background: linear-gradient(180deg, #2d735e, #1d5948);
+  border-color: #213f52;
+  background: linear-gradient(180deg, #3d6f8d, #294d63);
 }
 
 button:disabled {
@@ -105,8 +105,8 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: rgba(56, 201, 143, 0.78);
-  box-shadow: 0 0 0 3px rgba(47, 128, 103, 0.12);
+  border-color: rgba(63, 111, 143, 0.78);
+  box-shadow: 0 0 0 3px rgba(63, 111, 143, 0.12);
 }
 
 input:disabled,
@@ -217,7 +217,7 @@ pre {
 
 .icon-button:hover:not(:disabled) {
   border-color: var(--moss);
-  background: #eef5f1;
+  background: #eef4f8;
 }
 
 .settings-button {
@@ -229,12 +229,12 @@ pre {
 
 .settings-active {
   border-color: var(--moss-dark);
-  background: linear-gradient(180deg, #337f69, #24644f);
+  background: linear-gradient(180deg, #477b9c, #315f79);
   color: #fff;
 }
 
 .settings-button:hover:not(:disabled) {
-  border-color: #174637;
+  border-color: #213f52;
   background: var(--moss-dark);
   color: #fff;
 }
@@ -284,8 +284,8 @@ h1 {
 }
 
 .model-badge-on {
-  border-color: rgba(47, 128, 103, 0.42);
-  background: #e7f3ee;
+  border-color: rgba(63, 111, 143, 0.42);
+  background: #e8f2f8;
   color: var(--moss-dark);
 }
 
@@ -304,8 +304,8 @@ h1 {
 }
 
 .health-online {
-  background: #2f9b68;
-  box-shadow: 0 0 0 4px rgba(47, 155, 104, 0.12);
+  background: #3f7fa6;
+  box-shadow: 0 0 0 4px rgba(63, 127, 166, 0.12);
 }
 
 .health-offline {
@@ -428,7 +428,7 @@ h1 {
 
 .secondary:hover:not(:disabled) {
   border-color: var(--moss);
-  background: #eef5f1;
+  background: #eef4f8;
   color: var(--moss-dark);
 }
 
@@ -756,14 +756,14 @@ h1 {
 }
 
 .chat-session:hover:not(:disabled) {
-  border-color: rgba(47, 128, 103, 0.48);
-  background: #eef5f1;
+  border-color: rgba(63, 111, 143, 0.48);
+  background: #eef4f8;
   color: var(--ink);
 }
 
 .chat-session-active {
   border-color: var(--moss);
-  background: #e7f3ee;
+  background: #e8f2f8;
 }
 
 .chat-session strong,
@@ -813,8 +813,8 @@ h1 {
 }
 
 .chat-user {
-  border-color: rgba(47, 128, 103, 0.36);
-  background: #eaf4ef;
+  border-color: rgba(63, 111, 143, 0.36);
+  background: #edf5f9;
 }
 
 .chat-item strong {

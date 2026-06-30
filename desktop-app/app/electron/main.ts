@@ -158,12 +158,12 @@ function guideHtml(markdown: string) {
   <style>
     :root {
       color-scheme: light;
-      --page: #eef2ef;
+      --page: #eef3f6;
       --panel: #ffffff;
       --ink: #202724;
       --muted: #65716c;
-      --line: #d4dfd8;
-      --accent: #2f8067;
+      --line: #d4dde2;
+      --accent: #3f6f8f;
       --gold: #b98a2f;
     }
     body {
@@ -320,7 +320,7 @@ function installAppMenu() {
         height: 760,
         minWidth: 760,
         minHeight: 560,
-        backgroundColor: "#eef2ef",
+        backgroundColor: "#eef3f6",
         title: "小计使用文档",
         webPreferences: {
           nodeIntegration: false,
