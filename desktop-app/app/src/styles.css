@@ -924,7 +924,6 @@ h1 {
 }
 
 .inline-math {
-  font-family: "Cambria Math", "Times New Roman", serif;
   color: #60411a;
   white-space: nowrap;
 }
@@ -970,12 +969,14 @@ h1 {
   overflow-x: auto;
 }
 
-.chat-formula code {
-  border: 0;
-  background: transparent;
+.chat-formula .math-html {
   color: #60411a;
-  padding: 0;
-  white-space: pre;
+  min-width: max-content;
+}
+
+.chat-formula .katex-display {
+  margin: 0;
+  text-align: left;
 }
 
 .chat-thinking {

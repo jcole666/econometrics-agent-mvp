@@ -20,6 +20,8 @@ import {
   Wand2,
   X
 } from "lucide-react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -267,7 +269,11 @@ function isFormulaLine(value: string) {
   const text = value.trim();
   if (text.length > 160) return false;
   if (!/[=≈∼~]/.test(text)) return false;
-  return /[βεαδγθλ]|Y|X|income|log|ln|\^|²|₀|₁|₂|₃/.test(text);
+  return /[βεαδγθλ]|\\[a-zA-Z]+|Y|X|income|log|ln|\^|²|₀|₁|₂|₃/.test(text);
+}
+
+function latexEnvironmentName(value: string) {
+  return value.trim().match(/^\\begin\{([^}]+)\}/)?.[1] ?? null;
 }
 
 function isTableRow(value: string) {
@@ -336,6 +342,40 @@ function parseChatMarkdown(value: string): ChatMarkdownBlock[] {
       continue;
     }
 
+    if (text.startsWith("\\[")) {
+      const formulaLines: string[] = [];
+      const first = text.replace(/^\\\[/, "").trim();
+      if (first && first !== "\\]") formulaLines.push(first);
+      index += 1;
+      while (index < lines.length && !lines[index].trim().endsWith("\\]")) {
+        formulaLines.push(lines[index].trim());
+        index += 1;
+      }
+      if (index < lines.length) {
+        const last = lines[index].trim().replace(/\\\]$/, "").trim();
+        if (last) formulaLines.push(last);
+        index += 1;
+      }
+      blocks.push({ kind: "formula", text: formulaLines.join("\n") });
+      continue;
+    }
+
+    const environmentName = latexEnvironmentName(text);
+    if (environmentName) {
+      const formulaLines = [text];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith(`\\end{${environmentName}}`)) {
+        formulaLines.push(lines[index].trim());
+        index += 1;
+      }
+      if (index < lines.length) {
+        formulaLines.push(lines[index].trim());
+        index += 1;
+      }
+      blocks.push({ kind: "formula", text: formulaLines.join("\n") });
+      continue;
+    }
+
     const heading = text.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
       blocks.push({ kind: "heading", level: heading[1].length, text: heading[2].trim() });
@@ -393,6 +433,8 @@ function parseChatMarkdown(value: string): ChatMarkdownBlock[] {
       if (
         nextText.startsWith("```") ||
         nextText.startsWith("$$") ||
+        nextText.startsWith("\\[") ||
+        Boolean(latexEnvironmentName(nextText)) ||
         /^(#{1,4})\s+/.test(nextText) ||
         isDivider(nextText) ||
         isTableRow(nextText) ||
@@ -410,39 +452,33 @@ function parseChatMarkdown(value: string): ChatMarkdownBlock[] {
   return blocks;
 }
 
-function formatInlineMath(value: string) {
-  const subscriptDigits: Record<string, string> = {
-    "0": "₀",
-    "1": "₁",
-    "2": "₂",
-    "3": "₃",
-    "4": "₄",
-    "5": "₅",
-    "6": "₆",
-    "7": "₇",
-    "8": "₈",
-    "9": "₉"
-  };
+function renderMathHtml(value: string, displayMode: boolean) {
+  try {
+    return katex.renderToString(value, {
+      displayMode,
+      throwOnError: false,
+      strict: false,
+      trust: false
+    });
+  } catch {
+    return "";
+  }
+}
 
-  return value
-    .replace(/\\beta/g, "β")
-    .replace(/\\alpha/g, "α")
-    .replace(/\\gamma/g, "γ")
-    .replace(/\\delta/g, "δ")
-    .replace(/\\theta/g, "θ")
-    .replace(/\\lambda/g, "λ")
-    .replace(/\\epsilon/g, "ε")
-    .replace(/\\neq/g, "≠")
-    .replace(/\\leq/g, "≤")
-    .replace(/\\geq/g, "≥")
-    .replace(/\\times/g, "×")
-    .replace(/\\cdot/g, "·")
-    .replace(/\\left|\\right/g, "")
-    .replace(/_([0-9]+)/g, (_, digits: string) => [...digits].map((digit) => subscriptDigits[digit] ?? digit).join(""));
+function InlineMath({ value }: { value: string }) {
+  const html = renderMathHtml(value, false);
+  if (!html) return <code>{value}</code>;
+  return <span className="inline-math" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+function BlockMath({ value }: { value: string }) {
+  const html = renderMathHtml(value, true);
+  if (!html) return <code>{value}</code>;
+  return <div className="math-html" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function renderInline(text: string) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\\\(.+?\\\))/g).filter(Boolean);
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\\\(.+?\\\)|\$[^$\n]+\$)/g).filter(Boolean);
   return parts.map((part, index) => {
     if (part.startsWith("`") && part.endsWith("`")) {
       return <code key={index}>{part.slice(1, -1)}</code>;
@@ -451,7 +487,10 @@ function renderInline(text: string) {
       return <b key={index}>{part.slice(2, -2)}</b>;
     }
     if (part.startsWith("\\(") && part.endsWith("\\)")) {
-      return <span className="inline-math" key={index}>{formatInlineMath(part.slice(2, -2))}</span>;
+      return <InlineMath key={index} value={part.slice(2, -2)} />;
+    }
+    if (part.startsWith("$") && part.endsWith("$")) {
+      return <InlineMath key={index} value={part.slice(1, -1)} />;
     }
     return <span key={index}>{part}</span>;
   });
@@ -1235,7 +1274,7 @@ function ChatMessageBody({ message }: { message: ChatMessage }) {
         if (block.kind === "formula") {
           return (
             <div className="chat-formula" key={index}>
-              <code>{block.text}</code>
+              <BlockMath value={block.text} />
             </div>
           );
         }
