@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   chat,
@@ -58,8 +58,28 @@ const CHAT_PLACEHOLDER = "为什么推荐这个模型？";
 const SETTINGS_KEY = "econometrics-agent.model-settings";
 const CHAT_SESSIONS_KEY = "econometrics-agent.chat-sessions";
 const ACTIVE_CHAT_KEY = "econometrics-agent.active-chat";
+const LAYOUT_WIDTHS_KEY = "econometrics-agent.layout-widths";
+
+const DEFAULT_RAIL_WIDTHS = { left: 330, right: 360 };
+const MIN_LEFT_RAIL = 280;
+const MIN_MAIN_RAIL = 420;
+const MIN_RIGHT_RAIL = 320;
+const COLUMN_RESIZER_WIDTH = 12;
 
 type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample";
+type ResizeEdge = "left" | "right";
+
+interface RailWidths {
+  left: number;
+  right: number;
+}
+
+interface ResizeSession {
+  edge: ResizeEdge;
+  startX: number;
+  left: number;
+  right: number;
+}
 
 interface ModelSettings {
   enabled: boolean;
@@ -119,6 +139,49 @@ function loadModelSettings(): ModelSettings {
     };
   } catch {
     return DEFAULT_MODEL_SETTINGS;
+  }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  const upper = Math.max(min, max);
+  return Math.min(Math.max(value, min), upper);
+}
+
+function readableWidth(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function fitRailWidths(widths: RailWidths, railSpace: number): RailWidths {
+  let left = Math.max(MIN_LEFT_RAIL, readableWidth(widths.left, DEFAULT_RAIL_WIDTHS.left));
+  let right = Math.max(MIN_RIGHT_RAIL, readableWidth(widths.right, DEFAULT_RAIL_WIDTHS.right));
+
+  if (!Number.isFinite(railSpace) || railSpace <= 0) {
+    return { left, right };
+  }
+
+  const sideSpace = railSpace - MIN_MAIN_RAIL;
+  if (sideSpace < MIN_LEFT_RAIL + MIN_RIGHT_RAIL) {
+    return { left: MIN_LEFT_RAIL, right: MIN_RIGHT_RAIL };
+  }
+
+  right = clamp(right, MIN_RIGHT_RAIL, sideSpace - MIN_LEFT_RAIL);
+  left = clamp(left, MIN_LEFT_RAIL, sideSpace - right);
+  return { left, right };
+}
+
+function loadRailWidths(): RailWidths {
+  try {
+    const raw = localStorage.getItem(LAYOUT_WIDTHS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return fitRailWidths(
+      {
+        left: readableWidth(parsed.left, DEFAULT_RAIL_WIDTHS.left),
+        right: readableWidth(parsed.right, DEFAULT_RAIL_WIDTHS.right)
+      },
+      0
+    );
+  } catch {
+    return DEFAULT_RAIL_WIDTHS;
   }
 }
 
@@ -534,6 +597,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
+  const [railWidths, setRailWidths] = useState<RailWidths>(() => loadRailWidths());
+  const [resizeEdge, setResizeEdge] = useState<ResizeEdge | null>(null);
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  const resizeSessionRef = useRef<ResizeSession | null>(null);
   const chatLogRef = useRef<HTMLDivElement | null>(null);
   const chatHistoryRef = useRef<HTMLDivElement | null>(null);
 
@@ -544,6 +611,13 @@ export default function App() {
     [chatState]
   );
   const chatHistory = currentChat?.messages ?? [];
+  const workspaceStyle = {
+    "--left-rail-width": `${railWidths.left}px`,
+    "--right-rail-width": `${railWidths.right}px`,
+    "--left-rail-min": `${MIN_LEFT_RAIL}px`,
+    "--main-rail-min": `${MIN_MAIN_RAIL}px`,
+    "--right-rail-min": `${MIN_RIGHT_RAIL}px`
+  } as CSSProperties;
   const filteredChatSessions = useMemo(() => {
     const keyword = chatSearch.trim().toLowerCase();
     return [...chatState.sessions]
@@ -555,10 +629,93 @@ export default function App() {
       });
   }, [chatSearch, chatState.sessions]);
 
+  function workspaceRailSpace() {
+    const node = workspaceRef.current;
+    if (!node) return 0;
+
+    const rect = node.getBoundingClientRect();
+    const style = window.getComputedStyle(node);
+    const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    return Math.max(0, rect.width - padding - COLUMN_RESIZER_WIDTH * 2);
+  }
+
+  function startColumnResize(edge: ResizeEdge, event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+
+    event.preventDefault();
+    resizeSessionRef.current = {
+      edge,
+      startX: event.clientX,
+      left: railWidths.left,
+      right: railWidths.right
+    };
+    setResizeEdge(edge);
+    document.body.classList.add("resizing-columns");
+  }
+
   useEffect(() => {
     getHealth()
       .then(() => setHealth("online"))
       .catch(() => setHealth("offline"));
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAYOUT_WIDTHS_KEY, JSON.stringify(railWidths));
+    } catch {
+    }
+  }, [railWidths]);
+
+  useEffect(() => {
+    const fitToWindow = () => {
+      setRailWidths((current) => fitRailWidths(current, workspaceRailSpace()));
+    };
+
+    const moveResize = (event: PointerEvent) => {
+      const session = resizeSessionRef.current;
+      if (!session) return;
+
+      const railSpace = workspaceRailSpace();
+      const dx = event.clientX - session.startX;
+
+      if (session.edge === "left") {
+        const maxLeft = railSpace - session.right - MIN_MAIN_RAIL;
+        setRailWidths((current) => ({
+          ...current,
+          left: clamp(session.left + dx, MIN_LEFT_RAIL, maxLeft)
+        }));
+        return;
+      }
+
+      const maxRight = railSpace - session.left - MIN_MAIN_RAIL;
+      setRailWidths((current) => ({
+        ...current,
+        right: clamp(session.right - dx, MIN_RIGHT_RAIL, maxRight)
+      }));
+    };
+
+    const stopResize = () => {
+      if (!resizeSessionRef.current) return;
+      resizeSessionRef.current = null;
+      setResizeEdge(null);
+      document.body.classList.remove("resizing-columns");
+    };
+
+    window.addEventListener("pointermove", moveResize);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+    window.addEventListener("resize", fitToWindow);
+    window.addEventListener("blur", stopResize);
+    fitToWindow();
+
+    return () => {
+      window.removeEventListener("pointermove", moveResize);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+      window.removeEventListener("resize", fitToWindow);
+      window.removeEventListener("blur", stopResize);
+      document.body.classList.remove("resizing-columns");
+    };
   }, []);
 
   useEffect(() => {
@@ -1007,7 +1164,7 @@ export default function App() {
         />
       ) : null}
 
-      <section className="workspace">
+      <section className="workspace" ref={workspaceRef} style={workspaceStyle}>
         <aside className="rail rail-left">
           <Panel title="数据" icon={<Database size={17} />}>
             <div className="file-row">
@@ -1098,6 +1255,12 @@ export default function App() {
           </Panel>
         </aside>
 
+        <ColumnResizeHandle
+          active={resizeEdge === "left"}
+          label="拖动调整左侧宽度"
+          onPointerDown={(event) => startColumnResize("left", event)}
+        />
+
         <section className="rail rail-main">
           <Panel title="字段画像" icon={<TableProperties size={17} />}>
             <ProfileTable profile={profile} />
@@ -1122,6 +1285,12 @@ export default function App() {
             <RunResultView result={runResult} notice={runNotice} />
           </Panel>
         </section>
+
+        <ColumnResizeHandle
+          active={resizeEdge === "right"}
+          label="拖动调整右侧宽度"
+          onPointerDown={(event) => startColumnResize("right", event)}
+        />
 
         <aside className="rail rail-right">
           <Panel title="建模问答" icon={<MessageSquare size={17} />} className="chat-panel">
@@ -1222,6 +1391,26 @@ function Panel({
       </div>
       {children}
     </section>
+  );
+}
+
+function ColumnResizeHandle({
+  active,
+  label,
+  onPointerDown
+}: {
+  active: boolean;
+  label: string;
+  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+}) {
+  return (
+    <div
+      className={active ? "column-resizer active" : "column-resizer"}
+      role="separator"
+      aria-label={label}
+      aria-orientation="vertical"
+      onPointerDown={onPointerDown}
+    />
   );
 }
 

@@ -315,9 +315,47 @@ h1 {
 .workspace {
   height: calc(100vh - 78px);
   display: grid;
-  grid-template-columns: 330px minmax(420px, 1fr) 360px;
-  gap: 12px;
+  grid-template-columns:
+    minmax(var(--left-rail-min, 280px), var(--left-rail-width, 330px))
+    12px
+    minmax(var(--main-rail-min, 420px), 1fr)
+    12px
+    minmax(var(--right-rail-min, 320px), var(--right-rail-width, 360px));
+  gap: 0;
   padding: 12px;
+}
+
+.column-resizer {
+  position: relative;
+  min-width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.column-resizer::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 1px;
+  border-radius: 999px;
+  background: rgba(126, 142, 134, 0.32);
+  transform: translateX(-50%);
+  transition: background 120ms ease, box-shadow 120ms ease, width 120ms ease;
+}
+
+.column-resizer:hover::before,
+.column-resizer.active::before {
+  width: 3px;
+  background: var(--moss);
+  box-shadow: 0 0 0 3px rgba(93, 113, 103, 0.12);
+}
+
+body.resizing-columns,
+body.resizing-columns * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .modal-backdrop {
@@ -1043,6 +1081,11 @@ h1 {
   .workspace {
     height: auto;
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .column-resizer {
+    display: none;
   }
 
   .status-strip {
