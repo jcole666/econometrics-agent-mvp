@@ -157,14 +157,14 @@ function guideHtml(markdown: string) {
   <title>小计使用文档</title>
   <style>
     :root {
-      color-scheme: dark;
-      --page: #0f1214;
-      --panel: #171b1f;
-      --ink: #f1efe7;
-      --muted: #aeb7b2;
-      --line: #303a3f;
-      --accent: #38c98f;
-      --gold: #d8ad50;
+      color-scheme: light;
+      --page: #eef2ef;
+      --panel: #ffffff;
+      --ink: #202724;
+      --muted: #65716c;
+      --line: #d4dfd8;
+      --accent: #2f8067;
+      --gold: #b98a2f;
     }
     body {
       margin: 0;
@@ -203,11 +203,11 @@ function guideHtml(markdown: string) {
       overflow: auto;
       border: 1px solid var(--line);
       border-radius: 7px;
-      background: var(--panel);
+      background: #11171a;
       padding: 12px;
     }
     code {
-      color: #dce7df;
+      color: #ecf0e8;
       font-family: "Cascadia Mono", Consolas, monospace;
       font-size: 13px;
     }
@@ -320,7 +320,7 @@ function installAppMenu() {
         height: 760,
         minWidth: 760,
         minHeight: 560,
-        backgroundColor: "#0f1214",
+        backgroundColor: "#eef2ef",
         title: "小计使用文档",
         webPreferences: {
           nodeIntegration: false,
