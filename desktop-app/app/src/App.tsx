@@ -395,7 +395,7 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [profile, setProfile] = useState<DataProfile | null>(null);
   const [question, setQuestion] = useState("");
-  const [columnsInput, setColumnsInput] = useState(DEFAULT_COLUMNS);
+  const [columnsInput, setColumnsInput] = useState("");
   const [dependentVariable, setDependentVariable] = useState("income");
   const [independentVariables, setIndependentVariables] = useState("education, experience, gender");
   const [entityColumn, setEntityColumn] = useState("");
@@ -421,7 +421,7 @@ export default function App() {
   const chatLogRef = useRef<HTMLDivElement | null>(null);
   const chatHistoryRef = useRef<HTMLDivElement | null>(null);
 
-  const columns = useMemo(() => splitList(columnsInput), [columnsInput]);
+  const columns = useMemo(() => splitList(columnsInput.trim() ? columnsInput : DEFAULT_COLUMNS), [columnsInput]);
   const llmConfig = useMemo(() => toLLMConfig(modelSettings), [modelSettings]);
   const currentChat = useMemo(
     () => chatState.sessions.find((session) => session.id === chatState.activeId) ?? chatState.sessions[0],
@@ -897,7 +897,12 @@ export default function App() {
               rows={4}
             />
             <label>字段列表</label>
-            <input value={columnsInput} onChange={(event) => setColumnsInput(event.target.value)} />
+            <input
+              className="columns-input"
+              value={columnsInput}
+              placeholder={DEFAULT_COLUMNS}
+              onChange={(event) => setColumnsInput(event.target.value)}
+            />
           </Panel>
 
           <Panel title="变量配置" icon={<Wand2 size={17} />}>

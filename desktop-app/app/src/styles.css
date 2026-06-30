@@ -654,7 +654,8 @@ h1 {
   padding: 7px 8px;
 }
 
-.question-input:focus::placeholder {
+.question-input:focus::placeholder,
+.columns-input:focus::placeholder {
   color: transparent;
 }
 
