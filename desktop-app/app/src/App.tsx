@@ -83,6 +83,7 @@ type ChatMarkdownBlock =
   | { kind: "paragraph"; text: string }
   | { kind: "heading"; level: number; text: string }
   | { kind: "list"; items: { text: string; depth: number }[] }
+  | { kind: "table"; headers: string[]; rows: string[][] }
   | { kind: "code"; language: string; code: string }
   | { kind: "formula"; text: string }
   | { kind: "rule" };
@@ -269,6 +270,26 @@ function isFormulaLine(value: string) {
   return /[βεαδγθλ]|Y|X|income|log|ln|\^|²|₀|₁|₂|₃/.test(text);
 }
 
+function isTableRow(value: string) {
+  const text = value.trim();
+  return text.startsWith("|") && text.endsWith("|") && text.slice(1, -1).includes("|");
+}
+
+function parseTableCells(value: string) {
+  return value
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function isTableSeparator(value: string) {
+  if (!isTableRow(value)) return false;
+  const cells = parseTableCells(value);
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
 function parseChatMarkdown(value: string): ChatMarkdownBlock[] {
   const lines = value.replace(/\r\n/g, "\n").split("\n");
   const blocks: ChatMarkdownBlock[] = [];
@@ -328,6 +349,19 @@ function parseChatMarkdown(value: string): ChatMarkdownBlock[] {
       continue;
     }
 
+    if (isTableRow(text) && index + 1 < lines.length && isTableSeparator(lines[index + 1].trim())) {
+      const headers = parseTableCells(text);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && isTableRow(lines[index].trim()) && !isTableSeparator(lines[index].trim())) {
+        const cells = parseTableCells(lines[index]);
+        rows.push(headers.map((_, cellIndex) => cells[cellIndex] ?? ""));
+        index += 1;
+      }
+      blocks.push({ kind: "table", headers, rows });
+      continue;
+    }
+
     const bullet = line.match(/^(\s*)[-*]\s+(.+)$/);
     if (bullet) {
       const items: { text: string; depth: number }[] = [];
@@ -361,6 +395,7 @@ function parseChatMarkdown(value: string): ChatMarkdownBlock[] {
         nextText.startsWith("$$") ||
         /^(#{1,4})\s+/.test(nextText) ||
         isDivider(nextText) ||
+        isTableRow(nextText) ||
         /^(\s*)[-*]\s+/.test(next) ||
         isFormulaLine(nextText)
       ) {
@@ -375,14 +410,48 @@ function parseChatMarkdown(value: string): ChatMarkdownBlock[] {
   return blocks;
 }
 
+function formatInlineMath(value: string) {
+  const subscriptDigits: Record<string, string> = {
+    "0": "₀",
+    "1": "₁",
+    "2": "₂",
+    "3": "₃",
+    "4": "₄",
+    "5": "₅",
+    "6": "₆",
+    "7": "₇",
+    "8": "₈",
+    "9": "₉"
+  };
+
+  return value
+    .replace(/\\beta/g, "β")
+    .replace(/\\alpha/g, "α")
+    .replace(/\\gamma/g, "γ")
+    .replace(/\\delta/g, "δ")
+    .replace(/\\theta/g, "θ")
+    .replace(/\\lambda/g, "λ")
+    .replace(/\\epsilon/g, "ε")
+    .replace(/\\neq/g, "≠")
+    .replace(/\\leq/g, "≤")
+    .replace(/\\geq/g, "≥")
+    .replace(/\\times/g, "×")
+    .replace(/\\cdot/g, "·")
+    .replace(/\\left|\\right/g, "")
+    .replace(/_([0-9]+)/g, (_, digits: string) => [...digits].map((digit) => subscriptDigits[digit] ?? digit).join(""));
+}
+
 function renderInline(text: string) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\\\(.+?\\\))/g).filter(Boolean);
   return parts.map((part, index) => {
     if (part.startsWith("`") && part.endsWith("`")) {
       return <code key={index}>{part.slice(1, -1)}</code>;
     }
     if (part.startsWith("**") && part.endsWith("**")) {
       return <b key={index}>{part.slice(2, -2)}</b>;
+    }
+    if (part.startsWith("\\(") && part.endsWith("\\)")) {
+      return <span className="inline-math" key={index}>{formatInlineMath(part.slice(2, -2))}</span>;
     }
     return <span key={index}>{part}</span>;
   });
@@ -1129,6 +1198,30 @@ function ChatMessageBody({ message }: { message: ChatMessage }) {
                 </li>
               ))}
             </ul>
+          );
+        }
+        if (block.kind === "table") {
+          return (
+            <div className="chat-table-wrap" key={index}>
+              <table className="chat-table">
+                <thead>
+                  <tr>
+                    {block.headers.map((header, headerIndex) => (
+                      <th key={`${index}-head-${headerIndex}`}>{renderInline(header)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={`${index}-row-${rowIndex}`}>
+                      {row.map((cell, cellIndex) => (
+                        <td key={`${index}-cell-${rowIndex}-${cellIndex}`}>{renderInline(cell)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           );
         }
         if (block.kind === "code") {
