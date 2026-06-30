@@ -4,14 +4,14 @@
   --butter: #fffecb;
   --mint: #ddf7b8;
   --aqua: #a7dde3;
-  --page: #fffecb;
+  --page: #fffefa;
   --surface: #fffefa;
-  --surface-2: #fffed2;
-  --surface-3: #f1ffd9;
+  --surface-2: #fffecb;
+  --surface-3: #ddf7b8;
   --ink: #283235;
   --muted: #697275;
-  --line: #d9d6c5;
-  --line-strong: #a9cbd0;
+  --line: #a7dde3;
+  --line-strong: #4faab3;
   --moss: #4faab3;
   --moss-dark: #2f7078;
   --rust: #c46f92;
@@ -34,17 +34,17 @@
 }
 
 *::-webkit-scrollbar-track {
-  background: #f5ead8;
+  background: var(--surface);
 }
 
 *::-webkit-scrollbar-thumb {
-  border: 2px solid #f5ead8;
+  border: 2px solid var(--surface);
   border-radius: 999px;
-  background: #a7dde3;
+  background: var(--aqua);
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: #7dc7cf;
+  background: var(--moss);
 }
 
 body {
@@ -77,7 +77,7 @@ button {
   padding: 7px 11px;
   cursor: pointer;
   font-weight: 800;
-  box-shadow: 0 8px 18px rgba(79, 170, 179, 0.16);
+  box-shadow: none;
 }
 
 button:hover:not(:disabled) {
@@ -96,7 +96,7 @@ select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fffefa;
+  background: var(--surface);
   color: var(--ink);
   padding: 8px 9px;
   outline: none;
@@ -105,15 +105,15 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: rgba(79, 170, 179, 0.78);
-  box-shadow: 0 0 0 3px rgba(167, 221, 227, 0.38);
+  border-color: var(--moss);
+  box-shadow: 0 0 0 3px var(--aqua);
 }
 
 input:disabled,
 textarea:disabled,
 select:disabled {
   color: #69736f;
-  background: #f4f0df;
+  background: var(--butter);
 }
 
 input::placeholder,
@@ -179,8 +179,8 @@ pre {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-bottom: 1px solid rgba(169, 203, 208, 0.82);
-  background: var(--aqua);
+  border-bottom: 3px solid var(--aqua);
+  background: var(--surface);
   padding: 13px 18px;
   overflow: hidden;
   box-shadow: 0 12px 24px rgba(87, 99, 101, 0.1);
@@ -217,7 +217,7 @@ pre {
 
 .icon-button:hover:not(:disabled) {
   border-color: var(--moss);
-  background: var(--surface-3);
+  background: var(--aqua);
 }
 
 .settings-button {
@@ -241,7 +241,7 @@ pre {
 
 .eyebrow {
   margin: 0 0 3px;
-  color: var(--gold);
+  color: var(--rust);
   font-size: 12px;
   font-weight: 800;
 }
@@ -261,9 +261,9 @@ h1 {
   grid-template-columns: auto auto auto 1fr;
   align-items: center;
   gap: 9px;
-  border: 1px solid rgba(169, 203, 208, 0.8);
+  border: 1px solid var(--aqua);
   border-radius: 6px;
-  background: var(--surface);
+  background: var(--butter);
   padding: 8px 10px;
   color: var(--muted);
   font-size: 12px;
@@ -284,8 +284,8 @@ h1 {
 }
 
 .model-badge-on {
-  border-color: rgba(79, 170, 179, 0.42);
-  background: #eafff2;
+  border-color: var(--moss);
+  background: var(--mint);
   color: var(--moss-dark);
 }
 
@@ -304,8 +304,8 @@ h1 {
 }
 
 .health-online {
-  background: #68b96f;
-  box-shadow: 0 0 0 4px rgba(221, 247, 184, 0.72);
+  background: var(--mint);
+  box-shadow: 0 0 0 4px var(--mint);
 }
 
 .health-offline {
@@ -317,6 +317,7 @@ h1 {
   display: grid;
   grid-template-columns: 330px minmax(420px, 1fr) 360px;
   gap: 12px;
+  background: var(--page);
   padding: 12px;
 }
 
@@ -363,7 +364,7 @@ h1 {
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fffef2;
+  background: var(--butter);
   padding: 9px 10px;
 }
 
@@ -386,7 +387,7 @@ h1 {
 .settings-mode {
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: var(--surface-2);
+  background: var(--pink);
   color: var(--muted);
   padding: 3px 7px;
   font-size: 12px;
@@ -428,7 +429,7 @@ h1 {
 
 .secondary:hover:not(:disabled) {
   border-color: var(--moss);
-  background: var(--surface-3);
+  background: var(--butter);
   color: var(--moss-dark);
 }
 
@@ -445,12 +446,13 @@ h1 {
 
 .panel {
   min-height: 0;
-  border: 1px solid rgba(169, 203, 208, 0.84);
+  border: 1px solid var(--aqua);
+  border-top: 4px solid var(--aqua);
   border-radius: 6px;
   background: var(--surface);
   padding: 11px;
   overflow: auto;
-  box-shadow: 0 16px 34px var(--shadow);
+  box-shadow: 0 10px 24px var(--shadow);
 }
 
 .rail-left .panel {
@@ -513,9 +515,9 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px dashed rgba(196, 111, 146, 0.62);
+  border: 1px dashed var(--rust);
   border-radius: 6px;
-  background: #fffef2;
+  background: var(--butter);
   color: var(--ink);
   padding: 7px 11px;
   cursor: pointer;
@@ -524,7 +526,7 @@ h1 {
 
 .file-button:hover {
   border-color: var(--rust);
-  background: #fff0f6;
+  background: var(--pink);
 }
 
 .file-button input {
@@ -568,7 +570,7 @@ h1 {
   border: 1px dashed var(--line);
   border-radius: 6px;
   color: var(--muted);
-  background: var(--surface);
+  background: var(--butter);
   text-align: center;
 }
 
@@ -587,7 +589,7 @@ h1 {
 .model-line span {
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fffef2;
+  background: var(--butter);
   color: var(--muted);
   padding: 3px 7px;
   font-size: 12px;
@@ -702,7 +704,7 @@ h1 {
   width: min(318px, calc(100vw - 28px));
   border: 1px solid var(--line-strong);
   border-radius: 7px;
-  background: #fffefa;
+  background: var(--surface);
   box-shadow: 0 18px 42px rgba(87, 99, 101, 0.18);
   padding: 9px;
 }
@@ -744,21 +746,21 @@ h1 {
   flex-direction: column;
   gap: 2px;
   border-color: var(--line);
-  background: #fffefa;
+  background: var(--surface);
   color: var(--ink);
   padding: 7px 8px;
   text-align: left;
 }
 
 .chat-session:hover:not(:disabled) {
-  border-color: rgba(79, 170, 179, 0.54);
-  background: #f1ffd9;
+  border-color: var(--moss);
+  background: var(--mint);
   color: var(--ink);
 }
 
 .chat-session-active {
   border-color: var(--moss);
-  background: #eafff2;
+  background: var(--mint);
 }
 
 .chat-session strong,
@@ -785,7 +787,7 @@ h1 {
   justify-content: center;
   border: 1px dashed var(--line);
   border-radius: 6px;
-  background: #fffef2;
+  background: var(--butter);
   color: var(--muted);
   margin-top: 8px;
   font-size: 12px;
@@ -803,13 +805,13 @@ h1 {
 .chat-item {
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fffefa;
+  background: var(--surface);
   padding: 8px 9px;
 }
 
 .chat-user {
-  border-color: rgba(79, 170, 179, 0.38);
-  background: #f1ffd9;
+  border-color: var(--moss);
+  background: var(--mint);
 }
 
 .chat-item strong {
@@ -855,9 +857,9 @@ h1 {
 }
 
 .chat-markdown code {
-  border: 1px solid #e6d0dc;
+  border: 1px solid var(--pink);
   border-radius: 4px;
-  background: #fff0f6;
+  background: var(--pink);
   color: #7c3554;
   padding: 1px 4px;
   font-family: "Cascadia Mono", Consolas, monospace;
@@ -921,7 +923,7 @@ h1 {
 .chat-formula {
   border-left: 3px solid var(--gold);
   border-radius: 5px;
-  background: #fffedb;
+  background: var(--butter);
   padding: 8px 10px;
   overflow-x: auto;
 }
@@ -935,8 +937,8 @@ h1 {
 }
 
 .chat-thinking {
-  border-color: rgba(196, 111, 146, 0.44);
-  background: #fff0f6;
+  border-color: var(--rust);
+  background: var(--pink);
 }
 
 .thinking-line {

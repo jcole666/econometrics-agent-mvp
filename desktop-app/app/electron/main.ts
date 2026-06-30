@@ -162,7 +162,7 @@ function guideHtml(markdown: string) {
       --butter: #fffecb;
       --mint: #ddf7b8;
       --aqua: #a7dde3;
-      --page: #fffecb;
+      --page: #fffefa;
       --panel: #fffefa;
       --ink: #283235;
       --muted: #697275;
@@ -326,7 +326,7 @@ function installAppMenu() {
         height: 760,
         minWidth: 760,
         minHeight: 560,
-        backgroundColor: "#fffecb",
+        backgroundColor: "#fffefa",
         title: "小计使用文档",
         webPreferences: {
           nodeIntegration: false,
@@ -438,7 +438,7 @@ function createWindow() {
     height: 920,
     minWidth: 1040,
     minHeight: 720,
-    backgroundColor: "#fffecb",
+    backgroundColor: "#fffefa",
     title: APP_TITLE,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
