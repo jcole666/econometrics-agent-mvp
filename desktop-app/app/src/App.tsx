@@ -1045,7 +1045,25 @@ export default function App() {
             />
           </Panel>
 
-          <Panel title="变量配置" icon={<Wand2 size={17} />}>
+          <Panel title="分析报告" icon={<FileText size={17} />} className="report-panel">
+            <div className="report-actions">
+              <button type="button" onClick={makeReport} disabled={busy === "report"}>
+                <FileText size={16} />
+                <span>生成报告</span>
+              </button>
+              <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
+                <Download size={16} />
+                <span>导出 MD</span>
+              </button>
+              <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
+                <Download size={16} />
+                <span>导出 PDF</span>
+              </button>
+            </div>
+            <pre className="report">{report || "尚未生成报告。"}</pre>
+          </Panel>
+
+          <Panel title="变量配置" icon={<Wand2 size={17} />} className="variables-panel">
             <div className="two-buttons">
               <button type="button" onClick={infer} disabled={busy === "infer"}>
                 <Sparkles size={16} />
@@ -1106,7 +1124,7 @@ export default function App() {
         </section>
 
         <aside className="rail rail-right">
-          <Panel title="建模问答" icon={<MessageSquare size={17} />}>
+          <Panel title="建模问答" icon={<MessageSquare size={17} />} className="chat-panel">
             <div className="chat-tools">
               <button className="secondary chat-new-button" type="button" onClick={newChat} title="新建会话">
                 <Plus size={15} />
@@ -1179,33 +1197,25 @@ export default function App() {
               </button>
             </div>
           </Panel>
-
-          <Panel title="分析报告" icon={<FileText size={17} />}>
-            <div className="report-actions">
-              <button type="button" onClick={makeReport} disabled={busy === "report"}>
-                <FileText size={16} />
-                <span>生成报告</span>
-              </button>
-              <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
-                <Download size={16} />
-                <span>导出 MD</span>
-              </button>
-              <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
-                <Download size={16} />
-                <span>导出 PDF</span>
-              </button>
-            </div>
-            <pre className="report">{report || "尚未生成报告。"}</pre>
-          </Panel>
         </aside>
       </section>
     </main>
   );
 }
 
-function Panel({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+function Panel({
+  title,
+  icon,
+  children,
+  className
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <section className="panel">
+    <section className={className ? `panel ${className}` : "panel"}>
       <div className="panel-title">
         {icon}
         <h2>{title}</h2>

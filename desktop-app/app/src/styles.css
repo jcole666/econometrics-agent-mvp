@@ -460,7 +460,7 @@ h1 {
   overflow: visible;
 }
 
-.rail-left .panel:nth-child(3) {
+.rail-left .variables-panel {
   flex: 1 0 auto;
   min-height: 350px;
 }
@@ -643,6 +643,11 @@ h1 {
   margin-top: 8px;
 }
 
+.report-panel .report {
+  min-height: 220px;
+  max-height: 260px;
+}
+
 .report-actions {
   display: grid;
   grid-template-columns: 1fr 92px 100px;
@@ -661,7 +666,7 @@ h1 {
   color: transparent;
 }
 
-.rail-right .panel:first-child {
+.chat-panel {
   display: flex;
   flex-direction: column;
   overflow: visible;
