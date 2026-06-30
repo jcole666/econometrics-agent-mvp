@@ -1045,24 +1045,6 @@ export default function App() {
             />
           </Panel>
 
-          <Panel title="分析报告" icon={<FileText size={17} />} className="report-panel">
-            <div className="report-actions">
-              <button type="button" onClick={makeReport} disabled={busy === "report"}>
-                <FileText size={16} />
-                <span>生成报告</span>
-              </button>
-              <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
-                <Download size={16} />
-                <span>导出 MD</span>
-              </button>
-              <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
-                <Download size={16} />
-                <span>导出 PDF</span>
-              </button>
-            </div>
-            <pre className="report">{report || "尚未生成报告。"}</pre>
-          </Panel>
-
           <Panel title="变量配置" icon={<Wand2 size={17} />} className="variables-panel">
             <div className="two-buttons">
               <button type="button" onClick={infer} disabled={busy === "infer"}>
@@ -1095,6 +1077,24 @@ export default function App() {
               <Input label="断点变量" value={runningVariable} onChange={setRunningVariable} />
               <Input label="工具变量" value={instrumentVariable} onChange={setInstrumentVariable} />
             </div>
+          </Panel>
+
+          <Panel title="分析报告" icon={<FileText size={17} />} className="report-panel">
+            <div className="report-actions">
+              <button type="button" onClick={makeReport} disabled={busy === "report"}>
+                <FileText size={16} />
+                <span>生成报告</span>
+              </button>
+              <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
+                <Download size={16} />
+                <span>导出 MD</span>
+              </button>
+              <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
+                <Download size={16} />
+                <span>导出 PDF</span>
+              </button>
+            </div>
+            <pre className="report">{report || "尚未生成报告。"}</pre>
           </Panel>
         </aside>
 
