@@ -214,6 +214,13 @@ function formatNumber(value: number | null | undefined): string {
   return Math.abs(value) >= 1000 ? value.toFixed(1) : value.toFixed(4);
 }
 
+function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "0%";
+  }
+  return `${(value * 100).toFixed(value > 0 && value < 0.01 ? 1 : 0)}%`;
+}
+
 function providerLabel(provider: string | undefined): string {
   if (provider === "custom_model") return "自定义模型";
   if (provider === "huawei_maas") return "华为云 MaaS";
@@ -1605,34 +1612,130 @@ function ProfileTable({ profile }: { profile: DataProfile | null }) {
     return <div className="empty">尚未生成字段画像。</div>;
   }
 
+  const diagnostics = profile.diagnostics;
+
   return (
-    <div className="table-wrap">
-      <div className="metric-row">
-        <span>{profile.rows} 行</span>
-        <span>{profile.columns_count} 列</span>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>字段名</th>
-            <th>类型</th>
-            <th>缺失</th>
-            <th>唯一值</th>
-            <th>样例值</th>
-          </tr>
-        </thead>
-        <tbody>
-          {profile.columns.map((column) => (
-            <tr key={column.name}>
-              <td>{column.name}</td>
-              <td>{column.dtype}</td>
-              <td>{column.missing}</td>
-              <td>{column.unique}</td>
-              <td>{column.sample_values.join(", ")}</td>
+    <div className="profile-stack">
+      {diagnostics ? (
+        <DataDiagnosticsView profile={profile} />
+      ) : (
+        <div className="metric-row">
+          <span>{profile.rows} 行</span>
+          <span>{profile.columns_count} 列</span>
+        </div>
+      )}
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>字段名</th>
+              <th>类型判断</th>
+              <th>原始类型</th>
+              <th>缺失</th>
+              <th>缺失率</th>
+              <th>唯一值</th>
+              <th>样例值</th>
             </tr>
+          </thead>
+          <tbody>
+            {profile.columns.map((column) => (
+              <tr key={column.name}>
+                <td title={column.name}>{column.name}</td>
+                <td>{column.kind ?? "未知"}</td>
+                <td>{column.dtype}</td>
+                <td>{column.missing}</td>
+                <td>{formatPercent(column.missing_rate)}</td>
+                <td>{column.unique}</td>
+                <td title={column.sample_values.join(", ")}>{column.sample_values.join(", ")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function DataDiagnosticsView({ profile }: { profile: DataProfile }) {
+  const diagnostics = profile.diagnostics;
+  if (!diagnostics) return null;
+
+  const panel = diagnostics.panel_hint;
+  const riskItems = [
+    ...diagnostics.modeling_warnings.map((item) => `${item.name}：${item.reason}`),
+    ...diagnostics.outlier_columns.map((item) => `${item.name}：发现 ${item.outliers} 个 IQR 异常值`),
+  ];
+
+  if (diagnostics.duplicate_rows > 0) {
+    riskItems.unshift(`重复行：${diagnostics.duplicate_rows} 行`);
+  }
+
+  if (riskItems.length === 0) {
+    riskItems.push("暂未发现明显质量风险。");
+  }
+
+  return (
+    <div className="diagnostics">
+      <div className="diagnostic-cards">
+        <div className="diagnostic-card">
+          <span>样本量</span>
+          <strong>{profile.rows}</strong>
+          <small>{profile.columns_count} 个字段</small>
+        </div>
+        <div className="diagnostic-card">
+          <span>总缺失</span>
+          <strong>{formatPercent(diagnostics.missing_rate)}</strong>
+          <small>{diagnostics.total_missing} 个单元格</small>
+        </div>
+        <div className="diagnostic-card">
+          <span>重复行</span>
+          <strong>{diagnostics.duplicate_rows}</strong>
+          <small>{diagnostics.duplicate_rows ? "需要核查" : "未发现"}</small>
+        </div>
+        <div className="diagnostic-card">
+          <span>字段类型</span>
+          <strong>{diagnostics.numeric_columns}/{diagnostics.categorical_columns}</strong>
+          <small>数值 / 分类文本</small>
+        </div>
+      </div>
+
+      <div className="diagnostic-section">
+        <div className="diagnostic-title">结构识别</div>
+        <div className="diagnostic-tags">
+          <span>时间列：{diagnostics.possible_time_columns.join(", ") || "未识别"}</span>
+          <span>个体/地区列：{diagnostics.possible_entity_columns.join(", ") || "未识别"}</span>
+          <span>时间类型字段：{diagnostics.datetime_columns}</span>
+        </div>
+        {panel ? (
+          <div className="panel-hint">
+            <strong>{panel.entity_column} × {panel.time_column}</strong>
+            <span>{panel.units} 个个体，{panel.periods} 期，{panel.is_balanced ? "平衡面板" : `缺 ${panel.missing_cells} 个观测格`}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="diagnostic-section">
+        <div className="diagnostic-title">分类字段</div>
+        <div className="diagnostic-tags">
+          {diagnostics.categorical_summaries.length ? (
+            diagnostics.categorical_summaries.slice(0, 6).map((item) => (
+              <span key={item.name}>{item.name}：{item.unique} 类</span>
+            ))
+          ) : (
+            <span>暂无分类字段</span>
+          )}
+        </div>
+      </div>
+
+      <div className="diagnostic-section">
+        <div className="diagnostic-title">风险提示</div>
+        <ul className="diagnostic-list">
+          {riskItems.slice(0, 8).map((item) => (
+            <li key={item}>{item}</li>
           ))}
-        </tbody>
-      </table>
+        </ul>
+      </div>
     </div>
   );
 }

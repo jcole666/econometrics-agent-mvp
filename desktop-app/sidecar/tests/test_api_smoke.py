@@ -20,6 +20,21 @@ def test_health_endpoint() -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_sample_profile_includes_diagnostics() -> None:
+    response = client.get("/sample-profile")
+
+    assert response.status_code == 200
+    body = response.json()
+    diagnostics = body["diagnostics"]
+    assert body["rows"] == 48
+    assert diagnostics["duplicate_rows"] == 0
+    assert "year" in diagnostics["possible_time_columns"]
+    assert "city" in diagnostics["possible_entity_columns"]
+    assert diagnostics["panel_hint"]["entity_column"] == "city"
+    assert diagnostics["panel_hint"]["time_column"] == "year"
+    assert diagnostics["panel_hint"]["is_balanced"] is True
+
+
 def test_variable_inference_for_city_panel_question() -> None:
     payload = {
         "research_question": "Does the digital economy improve urban innovation?",

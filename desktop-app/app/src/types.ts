@@ -12,14 +12,69 @@ export interface ProfileColumn {
   name: string;
   dtype: string;
   missing: number;
+  missing_rate: number;
   unique: number;
+  kind: string;
   sample_values: string[];
+}
+
+export interface DiagnosticColumn {
+  name: string;
+  missing?: number;
+  missing_rate?: number;
+}
+
+export interface CategoricalSummary {
+  name: string;
+  unique: number;
+  top_values: string[];
+}
+
+export interface OutlierColumn {
+  name: string;
+  outliers: number;
+  lower_bound: number;
+  upper_bound: number;
+}
+
+export interface ModelingWarning {
+  name: string;
+  reason: string;
+}
+
+export interface PanelHint {
+  entity_column: string;
+  time_column: string;
+  units: number;
+  periods: number;
+  observed_cells: number;
+  expected_cells: number;
+  is_balanced: boolean;
+  missing_cells: number;
+}
+
+export interface DataDiagnostics {
+  total_missing: number;
+  missing_rate: number;
+  duplicate_rows: number;
+  numeric_columns: number;
+  categorical_columns: number;
+  datetime_columns: number;
+  possible_time_columns: string[];
+  possible_entity_columns: string[];
+  high_missing_columns: DiagnosticColumn[];
+  constant_columns: string[];
+  categorical_summaries: CategoricalSummary[];
+  outlier_columns: OutlierColumn[];
+  modeling_warnings: ModelingWarning[];
+  panel_hint: PanelHint | null;
 }
 
 export interface DataProfile {
   rows: number;
   columns_count: number;
   columns: ProfileColumn[];
+  diagnostics?: DataDiagnostics;
 }
 
 export interface ColumnInfo {
