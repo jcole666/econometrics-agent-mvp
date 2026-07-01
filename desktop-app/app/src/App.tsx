@@ -141,11 +141,9 @@ interface ResizeSession {
 
 interface PanelResizeSession {
   rail: RailId;
-  upper: PanelId;
-  lower: PanelId | null;
+  panelId: PanelId;
   startY: number;
-  upperHeight: number;
-  lowerHeight: number | null;
+  height: number;
 }
 
 interface ResearchPath {
@@ -1280,19 +1278,17 @@ export default function App() {
     } as CSSProperties;
   }
 
-  function startPanelResize(rail: RailId, upper: PanelId, lower: PanelId | null, event: ReactPointerEvent<HTMLDivElement>) {
+  function startPanelResize(rail: RailId, panelId: PanelId, event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
 
     event.preventDefault();
     panelResizeSessionRef.current = {
       rail,
-      upper,
-      lower,
+      panelId,
       startY: event.clientY,
-      upperHeight: currentPanelHeight(rail, upper),
-      lowerHeight: lower ? currentPanelHeight(rail, lower) : null
+      height: currentPanelHeight(rail, panelId)
     };
-    setPanelResizeKey(lower ? `${rail}:${upper}:${lower}` : `${rail}:${upper}`);
+    setPanelResizeKey(`${rail}:${panelId}`);
     document.body.classList.add("resizing-panels");
   }
 
@@ -1370,31 +1366,14 @@ export default function App() {
       if (!panelSession) return;
 
       const dy = event.clientY - panelSession.startY;
-      const upperMin = panelMinHeight(panelSession.upper);
-      if (!panelSession.lower) {
-        const upperHeight = clamp(panelSession.upperHeight + dy, upperMin, Math.max(upperMin, window.innerHeight * 1.6));
-        setPanelHeights((current) => ({
-          ...current,
-          [panelSession.rail]: {
-            ...current[panelSession.rail],
-            [panelSession.upper]: upperHeight
-          }
-        }));
-        return;
-      }
-
-      const lower = panelSession.lower;
-      const lowerMin = panelMinHeight(lower);
-      const totalHeight = panelSession.upperHeight + (panelSession.lowerHeight ?? 0);
-      const upperHeight = clamp(panelSession.upperHeight + dy, upperMin, totalHeight - lowerMin);
-      const lowerHeight = totalHeight - upperHeight;
+      const minHeight = panelMinHeight(panelSession.panelId);
+      const nextHeight = clamp(panelSession.height + dy, minHeight, Math.max(minHeight, window.innerHeight * 1.6));
 
       setPanelHeights((current) => ({
         ...current,
         [panelSession.rail]: {
           ...current[panelSession.rail],
-          [panelSession.upper]: upperHeight,
-          [lower]: lowerHeight
+          [panelSession.panelId]: nextHeight
         }
       }));
     };
@@ -2045,9 +2024,9 @@ export default function App() {
             </button>
           </Panel>
           <PanelResizeHandle
-            active={panelResizeKey === "left:data:question"}
-            label="调整数据和研究问题高度"
-            onPointerDown={(event) => startPanelResize("left", "data", "question", event)}
+            active={panelResizeKey === "left:data"}
+            label="调整数据板块高度"
+            onPointerDown={(event) => startPanelResize("left", "data", event)}
             onDoubleClick={() => resetPanelRail("left")}
           />
 
@@ -2070,9 +2049,9 @@ export default function App() {
             />
           </Panel>
           <PanelResizeHandle
-            active={panelResizeKey === "left:question:variables"}
-            label="调整研究问题和变量配置高度"
-            onPointerDown={(event) => startPanelResize("left", "question", "variables", event)}
+            active={panelResizeKey === "left:question"}
+            label="调整研究问题板块高度"
+            onPointerDown={(event) => startPanelResize("left", "question", event)}
             onDoubleClick={() => resetPanelRail("left")}
           />
 
@@ -2112,9 +2091,9 @@ export default function App() {
             </div>
           </Panel>
           <PanelResizeHandle
-            active={panelResizeKey === "left:variables:report"}
-            label="调整变量配置和分析报告高度"
-            onPointerDown={(event) => startPanelResize("left", "variables", "report", event)}
+            active={panelResizeKey === "left:variables"}
+            label="调整变量配置板块高度"
+            onPointerDown={(event) => startPanelResize("left", "variables", event)}
             onDoubleClick={() => resetPanelRail("left")}
           />
 
@@ -2135,6 +2114,12 @@ export default function App() {
             </div>
             <pre className="report">{report || "尚未生成报告。"}</pre>
           </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "left:report"}
+            label="调整分析报告板块高度"
+            onPointerDown={(event) => startPanelResize("left", "report", event)}
+            onDoubleClick={() => resetPanelRail("left")}
+          />
         </aside>
 
         <ColumnResizeHandle
@@ -2148,9 +2133,9 @@ export default function App() {
             <ProfileTable profile={profile} />
           </Panel>
           <PanelResizeHandle
-            active={panelResizeKey === "main:profile:path"}
-            label="调整字段画像和研究路径高度"
-            onPointerDown={(event) => startPanelResize("main", "profile", "path", event)}
+            active={panelResizeKey === "main:profile"}
+            label="调整字段画像板块高度"
+            onPointerDown={(event) => startPanelResize("main", "profile", event)}
             onDoubleClick={() => resetPanelRail("main")}
           />
 
@@ -2164,9 +2149,9 @@ export default function App() {
             />
           </Panel>
           <PanelResizeHandle
-            active={panelResizeKey === "main:path:recommendation"}
-            label="调整研究路径和模型推荐高度"
-            onPointerDown={(event) => startPanelResize("main", "path", "recommendation", event)}
+            active={panelResizeKey === "main:path"}
+            label="调整研究路径板块高度"
+            onPointerDown={(event) => startPanelResize("main", "path", event)}
             onDoubleClick={() => resetPanelRail("main")}
           />
 
@@ -2185,15 +2170,21 @@ export default function App() {
             <RecommendationView recommendation={recommendation} notice={recommendationNotice} />
           </Panel>
           <PanelResizeHandle
-            active={panelResizeKey === "main:recommendation:result"}
-            label="调整模型推荐和模型结果高度"
-            onPointerDown={(event) => startPanelResize("main", "recommendation", "result", event)}
+            active={panelResizeKey === "main:recommendation"}
+            label="调整模型推荐板块高度"
+            onPointerDown={(event) => startPanelResize("main", "recommendation", event)}
             onDoubleClick={() => resetPanelRail("main")}
           />
 
           <Panel title="模型结果" icon={<Activity size={17} />} style={panelStyle("main", "result")}>
             <RunResultView result={runResult} notice={runNotice} />
           </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "main:result"}
+            label="调整模型结果板块高度"
+            onPointerDown={(event) => startPanelResize("main", "result", event)}
+            onDoubleClick={() => resetPanelRail("main")}
+          />
         </section>
 
         <ColumnResizeHandle
@@ -2280,7 +2271,7 @@ export default function App() {
           <PanelResizeHandle
             active={panelResizeKey === "right:chat"}
             label="调整建模问答高度"
-            onPointerDown={(event) => startPanelResize("right", "chat", null, event)}
+            onPointerDown={(event) => startPanelResize("right", "chat", event)}
             onDoubleClick={() => resetPanelRail("right")}
           />
         </aside>
@@ -2351,7 +2342,7 @@ function PanelResizeHandle({
       role="separator"
       aria-label={label}
       aria-orientation="horizontal"
-      title="拖动调整上下高度，双击恢复本列高度"
+      title="拖动调整当前板块高度，双击恢复本列高度"
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
     />
