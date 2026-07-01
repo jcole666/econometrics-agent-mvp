@@ -1228,22 +1228,66 @@ export default function App() {
     }
   }
 
+  function applySampleState(sampleFile: File, sampleProfile: DataProfile, demo: boolean) {
+    setFile(sampleFile);
+    setProfile(sampleProfile);
+    setQuestion(demo ? DEFAULT_QUESTION : "");
+    setColumnsInput(sampleProfile.columns.map((column) => column.name).join(", "));
+    setDependentVariable(demo ? DEFAULT_DEPENDENT_VARIABLE : "");
+    setIndependentVariables(demo ? DEFAULT_INDEPENDENT_VARIABLES : "");
+    setEntityColumn(demo ? "city" : "");
+    setTimeColumn(demo ? "year" : "");
+    setTreatmentColumn("");
+    setRunningVariable("");
+    setInstrumentVariable("");
+    setModelType(demo ? "Panel Fixed Effects" : "OLS");
+    setInference(null);
+    setRecommendation(null);
+    setRecommendationNotice(null);
+    setRunResult(null);
+    setRunNotice(null);
+    setReport("");
+  }
+
   async function loadSample() {
     setBusy("sample");
     try {
       const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
-      setFile(sampleFile);
-      setProfile(sampleProfile);
-      setQuestion("");
-      setRecommendationNotice(null);
-      setRunNotice(null);
-      setColumnsInput(sampleProfile.columns.map((column) => column.name).join(", "));
-      setDependentVariable("");
-      setIndependentVariables("");
-      setModelType("OLS");
+      applySampleState(sampleFile, sampleProfile, false);
       setStatus("样例数据已加载。");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "样例数据加载失败。");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function loadDemoScenario() {
+    setBusy("sample");
+    try {
+      const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
+      applySampleState(sampleFile, sampleProfile, true);
+      try {
+        const next = await recommendModel({
+          research_question: DEFAULT_QUESTION,
+          columns: sampleProfile.columns.map((column) => column.name),
+          dependent_variable: DEFAULT_DEPENDENT_VARIABLE,
+          independent_variables: splitList(DEFAULT_INDEPENDENT_VARIABLES),
+          entity_column: "city",
+          time_column: "year",
+          treatment_column: null,
+          running_variable: null,
+          instrument_variable: null,
+          llm_config: { enabled: false }
+        });
+        setRecommendation(next);
+        setModelType(next.model);
+        setStatus("演示场景已准备好，模型推荐已生成。");
+      } catch {
+        setStatus("演示场景已准备好，模型推荐可手动生成。");
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "演示场景加载失败。");
     } finally {
       setBusy(null);
     }
@@ -1547,6 +1591,10 @@ export default function App() {
               <button type="button" onClick={loadSample} disabled={busy === "sample"} title="加载样例数据">
                 <TableProperties size={16} />
                 <span>样例</span>
+              </button>
+              <button type="button" onClick={loadDemoScenario} disabled={busy === "sample"} title="准备演示场景">
+                <Sparkles size={16} />
+                <span>演示</span>
               </button>
             </div>
             <div className="filename">{file?.name ?? "尚未选择文件"}</div>

@@ -542,6 +542,10 @@ body.resizing-columns * {
   grid-template-columns: 1fr 1fr;
 }
 
+.file-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .send-row {
   grid-template-columns: 1fr 38px;
   margin-top: 8px;
