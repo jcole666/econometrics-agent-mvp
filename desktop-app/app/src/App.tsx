@@ -43,6 +43,7 @@ import type {
   LLMConfig,
   ModelRecommendation,
   ModelRequest,
+  RelationshipHint,
   RunModelResponse
 } from "./types";
 
@@ -2157,18 +2158,21 @@ function DataDiagnosticsView({ profile }: { profile: DataProfile }) {
       <div className="diagnostic-section">
         <div className="diagnostic-title">关系线索</div>
         {diagnostics.relationship_hints?.length ? (
-          <div className="relationship-list">
-            {diagnostics.relationship_hints.slice(0, 5).map((item) => (
-              <div className="relationship-item" key={`${item.left}-${item.right}`}>
-                <div>
-                  <strong>{item.left}</strong>
-                  <span>{item.direction}</span>
-                  <strong>{item.right}</strong>
+          <>
+            <RelationshipMap hints={diagnostics.relationship_hints.slice(0, 8)} />
+            <div className="relationship-list">
+              {diagnostics.relationship_hints.slice(0, 5).map((item) => (
+                <div className="relationship-item" key={`${item.left}-${item.right}`}>
+                  <div>
+                    <strong>{item.left}</strong>
+                    <span>{item.direction}</span>
+                    <strong>{item.right}</strong>
+                  </div>
+                  <p>{item.method} = {item.score.toFixed(3)}；{item.note}</p>
                 </div>
-                <p>{item.method} = {item.score.toFixed(3)}；{item.note}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         ) : (
           <div className="empty compact-empty">暂未发现明显变量关系。</div>
         )}
@@ -2184,6 +2188,62 @@ function DataDiagnosticsView({ profile }: { profile: DataProfile }) {
       </div>
     </div>
   );
+}
+
+function RelationshipMap({ hints }: { hints: RelationshipHint[] }) {
+  const names = Array.from(new Set(hints.flatMap((item) => [item.left, item.right]))).slice(0, 6);
+  if (names.length < 2) return null;
+
+  const slots = [
+    { x: 50, y: 50 },
+    { x: 20, y: 24 },
+    { x: 80, y: 24 },
+    { x: 22, y: 70 },
+    { x: 78, y: 70 },
+    { x: 50, y: 82 },
+  ];
+  const positions = new Map(names.map((name, index) => [name, slots[index]]));
+  const edges = hints.filter((item) => positions.has(item.left) && positions.has(item.right));
+
+  return (
+    <div className="relationship-map" aria-label="变量关系地图">
+      <svg viewBox="0 0 100 100" role="img">
+        <title>变量关系地图</title>
+        {edges.map((item) => {
+          const left = positions.get(item.left)!;
+          const right = positions.get(item.right)!;
+          return (
+            <line
+              key={`${item.left}-${item.right}`}
+              x1={left.x}
+              y1={left.y}
+              x2={right.x}
+              y2={right.y}
+              className={item.score >= 0 ? "relationship-edge-positive" : "relationship-edge-negative"}
+              strokeWidth={Math.max(0.5, Math.min(2.8, Math.abs(item.score) * 2.4))}
+            />
+          );
+        })}
+        {names.map((name, index) => {
+          const point = positions.get(name)!;
+          return (
+            <g className={index === 0 ? "relationship-node relationship-node-main" : "relationship-node"} key={name}>
+              <circle cx={point.x} cy={point.y} r={index === 0 ? 8.5 : 7.2} />
+              <text x={point.x} y={point.y + 14} textAnchor="middle">{shortVariableName(name)}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="relationship-map-note">
+        <strong>{names[0]}</strong>
+        <span>与 {names.length - 1} 个变量形成明显连接</span>
+      </div>
+    </div>
+  );
+}
+
+function shortVariableName(name: string): string {
+  return name.length > 18 ? `${name.slice(0, 15)}...` : name;
 }
 
 function ResearchPathView({ path }: { path: ResearchPath | null }) {
