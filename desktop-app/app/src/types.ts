@@ -171,6 +171,10 @@ export interface ChatMessage {
 
 export interface ChatContext {
   data_columns: string[];
+  data_summary?: string | null;
+  variable_settings?: Record<string, unknown> | null;
+  relationship_hints?: RelationshipHint[];
+  research_path?: Record<string, unknown> | null;
   recommended_model?: string | null;
   generated_code?: string | null;
   model_results?: ModelRunResults | null;

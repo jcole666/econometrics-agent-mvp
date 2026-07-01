@@ -42,6 +42,10 @@ class ChatMessage(BaseModel):
 
 class ChatContext(BaseModel):
     data_columns: list[str] = Field(default_factory=list)
+    data_summary: str | None = None
+    variable_settings: dict | None = None
+    relationship_hints: list[dict] = Field(default_factory=list)
+    research_path: dict | None = None
     recommended_model: str | None = None
     generated_code: str | None = None
     model_results: dict | None = None

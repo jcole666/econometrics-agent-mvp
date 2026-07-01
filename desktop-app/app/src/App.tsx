@@ -36,6 +36,7 @@ import {
   runModel
 } from "./api";
 import type {
+  ChatContext,
   ChatMessage,
   CoefficientResult,
   DataProfile,
@@ -516,6 +517,73 @@ function buildReportNotes({
   }
 
   return lines.join("\n");
+}
+
+function buildDataSummary(profile: DataProfile | null): string | null {
+  if (!profile?.diagnostics) return null;
+
+  const diagnostics = profile.diagnostics;
+  const parts = [
+    `${profile.rows} 行`,
+    `${profile.columns_count} 列`,
+    `缺失率 ${formatPercent(diagnostics.missing_rate)}`,
+    `重复行 ${diagnostics.duplicate_rows}`
+  ];
+
+  if (diagnostics.panel_hint) {
+    const panel = diagnostics.panel_hint;
+    parts.push(`${panel.entity_column} × ${panel.time_column}，${panel.is_balanced ? "平衡面板" : `缺 ${panel.missing_cells} 个观测格`}`);
+  }
+
+  return parts.join("；");
+}
+
+function buildChatContext({
+  columns,
+  profile,
+  path,
+  recommendation,
+  modelType,
+  runResult,
+  dependentVariable,
+  independentVariables,
+  entityColumn,
+  timeColumn,
+}: {
+  columns: string[];
+  profile: DataProfile | null;
+  path: ResearchPath | null;
+  recommendation: ModelRecommendation | null;
+  modelType: string;
+  runResult: RunModelResponse | null;
+  dependentVariable: string;
+  independentVariables: string;
+  entityColumn: string;
+  timeColumn: string;
+}): ChatContext {
+  return {
+    data_columns: columns,
+    data_summary: buildDataSummary(profile),
+    variable_settings: {
+      dependent_variable: dependentVariable.trim() || null,
+      independent_variables: splitList(independentVariables),
+      entity_column: entityColumn.trim() || null,
+      time_column: timeColumn.trim() || null,
+    },
+    relationship_hints: profile?.diagnostics?.relationship_hints?.slice(0, 5) ?? [],
+    research_path: path
+      ? {
+          question: path.question,
+          structure: path.structure,
+          model: path.model,
+          next_steps: path.nextSteps,
+          risks: path.risks,
+        }
+      : null,
+    recommended_model: recommendation?.model ?? modelType,
+    generated_code: recommendation?.generated_code ?? null,
+    model_results: runResult?.results ?? null
+  };
 }
 
 function missingModelSettings(settings: ModelSettings): string[] {
@@ -1420,12 +1488,18 @@ export default function App() {
       return;
     }
 
-    const context = {
-      data_columns: columns,
-      recommended_model: recommendation?.model ?? modelType,
-      generated_code: recommendation?.generated_code ?? null,
-      model_results: runResult?.results ?? null
-    };
+    const context = buildChatContext({
+      columns,
+      profile,
+      path: researchPath,
+      recommendation,
+      modelType,
+      runResult,
+      dependentVariable,
+      independentVariables,
+      entityColumn,
+      timeColumn,
+    });
     const visibleHistory = [...chatHistory, { role: "user" as const, content: message }];
     const sessionId = currentChat.id;
     saveChatMessages(sessionId, visibleHistory);

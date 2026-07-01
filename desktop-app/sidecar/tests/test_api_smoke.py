@@ -5,6 +5,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from sidecar.api import app
+from sidecar.schemas import ChatRequest
+from sidecar.services.chat_service import _dump_context
 
 ROOT = Path(__file__).resolve().parents[2]
 SAMPLE_PATH = ROOT / "examples" / "sample_city_panel.csv"
@@ -99,6 +101,27 @@ def test_chat_requires_model_config() -> None:
     assert body["provider"] == "model_error"
     assert "API Key" in body["reply"]
     assert "请求地址" in body["reply"]
+
+
+def test_chat_context_keeps_analysis_fields() -> None:
+    request = ChatRequest(
+        message="怎么看关系线索？",
+        context={
+            "data_columns": ["innovation_index", "digital_economy_index"],
+            "data_summary": "48 行；13 列；平衡面板",
+            "relationship_hints": [
+                {"left": "innovation_index", "right": "digital_economy_index", "score": 0.994, "direction": "正相关"}
+            ],
+            "research_path": {"model": "Panel Fixed Effects", "risks": ["相关关系不等于因果关系"]},
+        },
+        llm_config={"enabled": False},
+    )
+
+    context = _dump_context(request)
+
+    assert context["data_summary"] == "48 行；13 列；平衡面板"
+    assert context["relationship_hints"][0]["left"] == "innovation_index"
+    assert context["research_path"]["model"] == "Panel Fixed Effects"
 
 
 def test_ols_runner_returns_coefficients() -> None:
