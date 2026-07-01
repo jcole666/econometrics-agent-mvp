@@ -2,6 +2,20 @@
 
 一个本地运行的计量建模桌面工具。日常使用不需要打开网页，也不需要进命令行。
 
+## 下载发布版
+
+Windows 用户直接下载：
+
+[Xiaoji-v0.1.0.exe](https://github.com/jcole666/econometrics-agent-mvp/releases/download/v0.1.0/Xiaoji-v0.1.0.exe)
+
+下载后双击即可使用。第一次启动会自动拉起本地分析服务，可能需要等待十几秒。
+
+校验值：
+
+```text
+SHA256 9E807CB0B37E24B89838E50034FFC8BDFE1E191F5F33753FB931FE8309535161
+```
+
 ## 直接打开
 
 在项目根目录双击：
