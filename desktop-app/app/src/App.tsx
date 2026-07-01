@@ -2455,7 +2455,11 @@ export default function App() {
                     <span>导出 PDF</span>
                   </button>
                 </div>
-                <pre className="report">{report || "尚未生成报告。"}</pre>
+                {report.trim() ? (
+                  <MarkdownBody value={report} className="report report-rendered chat-markdown" />
+                ) : (
+                  <div className="report report-empty">尚未生成报告。</div>
+                )}
               </Panel>
             ) : null}
 
@@ -2834,9 +2838,13 @@ function ChatMessageBody({ message }: { message: ChatMessage }) {
     return <p className="chat-text">{message.content}</p>;
   }
 
-  const blocks = parseChatMarkdown(message.content);
+  return <MarkdownBody value={message.content} />;
+}
+
+function MarkdownBody({ value, className = "chat-markdown" }: { value: string; className?: string }) {
+  const blocks = parseChatMarkdown(value);
   return (
-    <div className="chat-markdown">
+    <div className={className}>
       {blocks.map((block, index) => {
         if (block.kind === "heading") {
           const levelClass = block.level <= 2 ? "chat-heading-main" : "chat-heading";

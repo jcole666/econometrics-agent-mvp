@@ -1870,8 +1870,6 @@ body.resizing-panels * {
   max-height: 260px;
   border-radius: 6px;
   padding: 10px;
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -1879,6 +1877,8 @@ body.resizing-panels * {
   border: 1px solid #2b3439;
   background: var(--code);
   color: #ecf0e8;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
 }
 
 .report {
@@ -1887,6 +1887,9 @@ body.resizing-panels * {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
+  font-family: Aptos, "Segoe UI", sans-serif;
+  font-size: 14px;
+  overflow: auto;
 }
 
 .report-panel .report {
@@ -1903,6 +1906,58 @@ body.resizing-panels * {
 .report-actions button {
   min-width: 0;
   padding: 7px 8px;
+}
+
+.report-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.report.report-rendered {
+  gap: 12px;
+  padding: 16px;
+  line-height: 1.65;
+}
+
+.report.report-rendered .chat-heading-main {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.report.report-rendered .chat-heading {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.report.report-rendered p,
+.report.report-rendered .chat-list {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.report.report-rendered .chat-list {
+  gap: 6px;
+  padding-left: 20px;
+}
+
+.report.report-rendered .chat-table {
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.report.report-rendered .chat-table th {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.report.report-rendered .chat-table td {
+  color: var(--ink);
 }
 
 .guide-panel {
