@@ -98,6 +98,7 @@ type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "
 type DemoStage = "idle" | "data" | "recommend" | "run" | "report" | "ready" | "error";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
+type WorkbenchView = "workflow" | "profile" | "path" | "report";
 type RailId = keyof typeof DEFAULT_PANEL_HEIGHTS;
 type PanelId = keyof typeof PANEL_MIN_HEIGHTS;
 type PanelHeights = Record<RailId, Partial<Record<PanelId, number>>>;
@@ -1232,6 +1233,7 @@ export default function App() {
   const [status, setStatus] = useState("就绪");
   const [busy, setBusy] = useState<BusyKey | null>(null);
   const [demoStage, setDemoStage] = useState<DemoStage>("idle");
+  const [activeView, setActiveView] = useState<WorkbenchView>("workflow");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
@@ -1265,6 +1267,7 @@ export default function App() {
     "--main-rail-min": `${MIN_MAIN_RAIL}px`,
     "--right-rail-min": `${MIN_RIGHT_RAIL}px`
   } as CSSProperties;
+  const workspaceClassName = activeView === "workflow" ? "workspace" : "workspace workspace-focused";
   const isWorking = busy !== null;
   const filteredChatSessions = useMemo(() => {
     const keyword = chatSearch.trim().toLowerCase();
@@ -1338,6 +1341,14 @@ export default function App() {
     } as CSSProperties;
   }
 
+  function showView(view: WorkbenchView) {
+    setActiveView(view);
+    if (view === "workflow") setStatus("已回到工作台。");
+    if (view === "profile") setStatus(profile ? "正在查看字段画像。" : "先选择数据并生成字段画像。");
+    if (view === "path") setStatus(researchPath ? "正在查看研究路径。" : "先生成字段画像和变量配置。");
+    if (view === "report") setStatus(report.trim() ? "正在查看分析报告。" : "可以在这里生成分析报告。");
+  }
+
   function startPanelResize(rail: RailId, panelId: PanelId, event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
 
@@ -1361,6 +1372,7 @@ export default function App() {
   }
 
   function applyDemoLayout() {
+    setActiveView("workflow");
     setRailWidths(fitRailWidths(DEMO_RAIL_WIDTHS, workspaceRailSpace()));
     setPanelHeights({
       left: { ...DEMO_PANEL_HEIGHTS.left },
@@ -1602,33 +1614,40 @@ export default function App() {
 
   function focusCheckpointTarget(target: CheckpointTarget) {
     if (target === "question") {
-      questionInputRef.current?.focus();
+      setActiveView("workflow");
+      window.setTimeout(() => questionInputRef.current?.focus(), 0);
       setStatus("请确认研究问题。");
       return;
     }
 
     if (target === "data") {
+      setActiveView("workflow");
       if (!file) {
         setStatus("先选择数据文件，或加载样例数据。");
         return;
       }
-      columnsInputRef.current?.focus();
+      window.setTimeout(() => columnsInputRef.current?.focus(), 0);
       setStatus(profile ? "字段画像已生成，可以继续确认数据结构。" : "点击“生成字段画像”查看数据结构。");
       return;
     }
 
     if (target === "variables") {
-      const targetInput = dependentVariable.trim() ? independentInputRef.current : dependentInputRef.current;
-      targetInput?.focus();
+      setActiveView("workflow");
+      window.setTimeout(() => {
+        const targetInput = dependentVariable.trim() ? independentInputRef.current : dependentInputRef.current;
+        targetInput?.focus();
+      }, 0);
       setStatus("请确认变量设定。");
       return;
     }
 
     if (target === "recommendation") {
+      setActiveView("workflow");
       setStatus(recommendation ? "请检查模型推荐和识别策略。" : "点击“推荐模型”生成识别策略建议。");
       return;
     }
 
+    setActiveView("path");
     setStatus("请确认风险边界，必要时回到变量配置或继续追问小计。");
   }
 
@@ -1642,6 +1661,7 @@ export default function App() {
       const next = await profileData(file);
       setProfile(next);
       setColumnsInput(next.columns.map((column) => column.name).join(", "));
+      setActiveView("profile");
       setStatus("字段画像已生成。");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "字段画像生成失败。");
@@ -1687,6 +1707,7 @@ export default function App() {
 
   async function loadDemoScenario() {
     setBusy("demo");
+    setActiveView("workflow");
     setDemoStage("data");
     try {
       const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
@@ -1857,6 +1878,7 @@ export default function App() {
   }
 
   function prepareReviewQuestion(questionText: string) {
+    setActiveView("workflow");
     setChatInput(questionText);
     setChatHistoryOpen(false);
     setStatus("已放入评审追问，确认后可以发送给小计。");
@@ -1919,6 +1941,7 @@ export default function App() {
       });
       const response = await generateReport(researchQuestion, modelType, runResult?.results ?? null, notes, llmConfig);
       setReport(response.markdown);
+      setActiveView("report");
       setStatus("报告已生成。");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "报告生成失败。");
@@ -2009,6 +2032,40 @@ export default function App() {
             <p className="eyebrow">计量建模小计</p>
             <h1>研究工作台</h1>
           </div>
+          <nav className="view-switch" aria-label="工作区视图">
+            <button
+              className={`view-switch-button ${activeView === "workflow" ? "active" : ""}`}
+              type="button"
+              onClick={() => showView("workflow")}
+            >
+              <Database size={15} />
+              <span>工作台</span>
+            </button>
+            <button
+              className={`view-switch-button ${activeView === "profile" ? "active" : ""}`}
+              type="button"
+              onClick={() => showView("profile")}
+            >
+              <TableProperties size={15} />
+              <span>字段画像</span>
+            </button>
+            <button
+              className={`view-switch-button ${activeView === "path" ? "active" : ""}`}
+              type="button"
+              onClick={() => showView("path")}
+            >
+              <Sparkles size={15} />
+              <span>研究路径</span>
+            </button>
+            <button
+              className={`view-switch-button ${activeView === "report" ? "active" : ""}`}
+              type="button"
+              onClick={() => showView("report")}
+            >
+              <FileText size={15} />
+              <span>分析报告</span>
+            </button>
+          </nav>
         </div>
         <div className="topbar-actions">
           <div className="status-strip">
@@ -2050,7 +2107,9 @@ export default function App() {
         />
       ) : null}
 
-      <section className="workspace" ref={workspaceRef} style={workspaceStyle}>
+      <section className={workspaceClassName} ref={workspaceRef} style={workspaceStyle}>
+        {activeView === "workflow" ? (
+          <>
         <aside className="rail rail-left">
           <Panel title="数据" icon={<Database size={17} />} style={panelStyle("left", "data")}>
             <div className="file-row">
@@ -2165,29 +2224,6 @@ export default function App() {
             onDoubleClick={() => resetPanelRail("left")}
           />
 
-          <Panel title="分析报告" icon={<FileText size={17} />} className="report-panel" style={panelStyle("left", "report")}>
-            <div className="report-actions">
-              <button type="button" onClick={makeReport} disabled={isWorking}>
-                <FileText size={16} />
-                <span>生成报告</span>
-              </button>
-              <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
-                <Download size={16} />
-                <span>导出 MD</span>
-              </button>
-              <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
-                <Download size={16} />
-                <span>导出 PDF</span>
-              </button>
-            </div>
-            <pre className="report">{report || "尚未生成报告。"}</pre>
-          </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "left:report"}
-            label="调整分析报告板块高度"
-            onPointerDown={(event) => startPanelResize("left", "report", event)}
-            onDoubleClick={() => resetPanelRail("left")}
-          />
         </aside>
 
         <ColumnResizeHandle
@@ -2197,32 +2233,6 @@ export default function App() {
         />
 
         <section className="rail rail-main">
-          <Panel title="字段画像" icon={<TableProperties size={17} />} style={panelStyle("main", "profile")}>
-            <ProfileTable profile={profile} />
-          </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "main:profile"}
-            label="调整字段画像板块高度"
-            onPointerDown={(event) => startPanelResize("main", "profile", event)}
-            onDoubleClick={() => resetPanelRail("main")}
-          />
-
-          <Panel title="研究路径" icon={<Sparkles size={17} />} style={panelStyle("main", "path")}>
-            <ResearchPathView path={researchPath} />
-            <CollaborationCheckpoints
-              checkpoints={collaborationCheckpoints}
-              confirmedIds={confirmedCheckpoints}
-              onToggle={toggleCheckpoint}
-              onFocus={focusCheckpointTarget}
-            />
-          </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "main:path"}
-            label="调整研究路径板块高度"
-            onPointerDown={(event) => startPanelResize("main", "path", event)}
-            onDoubleClick={() => resetPanelRail("main")}
-          />
-
           <Panel title="模型推荐" icon={<Cpu size={17} />} style={panelStyle("main", "recommendation")}>
             <div className="runbar">
               <select value={modelType} onChange={(event) => setModelType(event.target.value)}>
@@ -2343,6 +2353,48 @@ export default function App() {
             onDoubleClick={() => resetPanelRail("right")}
           />
         </aside>
+          </>
+        ) : (
+          <div className="focus-view">
+            {activeView === "profile" ? (
+              <Panel title="字段画像" icon={<TableProperties size={17} />} className="focus-panel">
+                <ProfileTable profile={profile} />
+              </Panel>
+            ) : null}
+
+            {activeView === "path" ? (
+              <Panel title="研究路径" icon={<Sparkles size={17} />} className="focus-panel">
+                <ResearchPathView path={researchPath} />
+                <CollaborationCheckpoints
+                  checkpoints={collaborationCheckpoints}
+                  confirmedIds={confirmedCheckpoints}
+                  onToggle={toggleCheckpoint}
+                  onFocus={focusCheckpointTarget}
+                />
+              </Panel>
+            ) : null}
+
+            {activeView === "report" ? (
+              <Panel title="分析报告" icon={<FileText size={17} />} className="report-panel focus-panel">
+                <div className="report-actions">
+                  <button type="button" onClick={makeReport} disabled={isWorking}>
+                    <FileText size={16} />
+                    <span>生成报告</span>
+                  </button>
+                  <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
+                    <Download size={16} />
+                    <span>导出 MD</span>
+                  </button>
+                  <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
+                    <Download size={16} />
+                    <span>导出 PDF</span>
+                  </button>
+                </div>
+                <pre className="report">{report || "尚未生成报告。"}</pre>
+              </Panel>
+            ) : null}
+          </div>
+        )}
       </section>
     </main>
   );

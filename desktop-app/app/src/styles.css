@@ -187,14 +187,15 @@ pre {
 }
 
 .topbar-left {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  min-width: 0;
 }
 
 .topbar-actions {
-  flex: 1 1 auto;
+  flex: 0 1 690px;
   margin-left: auto;
   margin-right: 0;
   justify-content: flex-end;
@@ -202,6 +203,42 @@ pre {
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.view-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.view-switch::-webkit-scrollbar {
+  display: none;
+}
+
+.view-switch-button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  border-color: var(--line);
+  background: #fbfdf9;
+  color: var(--moss-dark);
+  box-shadow: none;
+  padding: 5px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.view-switch-button:hover:not(:disabled) {
+  border-color: var(--moss);
+  background: #eef4f8;
+}
+
+.view-switch-button.active {
+  border-color: rgba(63, 111, 143, 0.5);
+  background: #e8f2f8;
+  color: var(--moss-dark);
 }
 
 .icon-button {
@@ -341,6 +378,31 @@ h1 {
     minmax(var(--right-rail-min, 320px), var(--right-rail-width, 360px));
   gap: 0;
   padding: 12px;
+}
+
+.workspace-focused {
+  display: block;
+  overflow: auto;
+}
+
+.focus-view {
+  min-height: 100%;
+  display: flex;
+}
+
+.focus-panel {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.focus-panel.report-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.focus-panel.report-panel .report {
+  flex: 1 1 auto;
+  max-height: none;
 }
 
 .column-resizer {
@@ -1965,6 +2027,10 @@ body.resizing-panels * {
   .status-strip {
     min-width: 300px;
   }
+
+  .view-switch-button span {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1977,6 +2043,23 @@ body.resizing-panels * {
 
   .workspace {
     padding: 8px;
+  }
+
+  .topbar-left {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .view-switch {
+    width: 100%;
+  }
+
+  .view-switch-button {
+    flex: 1 1 0;
+  }
+
+  .view-switch-button span {
+    display: inline;
   }
 
   .status-strip {
