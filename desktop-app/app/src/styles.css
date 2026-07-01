@@ -1,20 +1,20 @@
 :root {
   color-scheme: light;
-  --page: #eef3f6;
+  --page: #f7f7f5;
   --surface: #ffffff;
-  --surface-2: #edf3f6;
-  --surface-3: #f7f9fa;
-  --ink: #202724;
-  --muted: #65716c;
-  --line: #d4dde2;
-  --line-strong: #a7b7c0;
-  --moss: #3f6f8f;
-  --moss-dark: #294d63;
-  --rust: #a64d45;
-  --gold: #b98a2f;
-  --graphite: #1f2528;
+  --surface-2: #f1f1ef;
+  --surface-3: #fafaf8;
+  --ink: #202123;
+  --muted: #6b6b66;
+  --line: #dfdfdc;
+  --line-strong: #c8c8c3;
+  --moss: #3d3d3a;
+  --moss-dark: #202123;
+  --rust: #b42318;
+  --gold: #8a6a2b;
+  --graphite: #202123;
   --code: #11171a;
-  --shadow: rgba(30, 41, 36, 0.11);
+  --shadow: rgba(0, 0, 0, 0.07);
   font-family: Aptos, "Segoe UI", sans-serif;
   font-size: 14px;
   letter-spacing: 0;
@@ -30,17 +30,17 @@
 }
 
 *::-webkit-scrollbar-track {
-  background: #e7ede8;
+  background: #f1f1ef;
 }
 
 *::-webkit-scrollbar-thumb {
-  border: 2px solid #e7ede8;
+  border: 2px solid #f1f1ef;
   border-radius: 999px;
-  background: #a9b8b0;
+  background: #c7c7c2;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: #7e9188;
+  background: #a8a8a2;
 }
 
 body {
@@ -48,11 +48,7 @@ body {
   min-width: 1040px;
   min-height: 100vh;
   overflow-x: hidden;
-  background:
-    linear-gradient(90deg, rgba(63, 111, 143, 0.055) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(63, 111, 143, 0.04) 1px, transparent 1px),
-    linear-gradient(145deg, #f6f8fa 0%, #eef3f6 48%, #e6edf1 100%);
-  background-size: 34px 34px, 34px 34px, auto;
+  background: var(--page);
   color: var(--ink);
 }
 
@@ -70,19 +66,19 @@ button {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid var(--moss-dark);
+  border: 1px solid var(--ink);
   border-radius: 6px;
-  background: linear-gradient(180deg, #477b9c, #315f79);
+  background: var(--ink);
   color: #fff;
   padding: 7px 11px;
   cursor: pointer;
   font-weight: 800;
-  box-shadow: 0 8px 18px rgba(41, 77, 99, 0.13);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
 }
 
 button:hover:not(:disabled) {
-  border-color: #213f52;
-  background: linear-gradient(180deg, #3d6f8d, #294d63);
+  border-color: #000000;
+  background: #000000;
 }
 
 button:disabled {
@@ -96,7 +92,7 @@ select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fbfdf9;
+  background: #ffffff;
   color: var(--ink);
   padding: 8px 9px;
   outline: none;
@@ -105,20 +101,20 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: rgba(63, 111, 143, 0.78);
-  box-shadow: 0 0 0 3px rgba(63, 111, 143, 0.12);
+  border-color: rgba(32, 33, 35, 0.72);
+  box-shadow: 0 0 0 3px rgba(32, 33, 35, 0.1);
 }
 
 input:disabled,
 textarea:disabled,
 select:disabled {
-  color: #69736f;
-  background: #eef3ef;
+  color: #85857f;
+  background: #f1f1ef;
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #69736f;
+  color: #85857f;
 }
 
 textarea {
@@ -152,12 +148,12 @@ td {
 
 th {
   background: var(--surface-2);
-  color: #43514b;
+  color: #555550;
   font-size: 11px;
 }
 
 td {
-  color: #29312e;
+  color: var(--ink);
 }
 
 pre {
@@ -179,11 +175,11 @@ pre {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-bottom: 1px solid rgba(168, 184, 176, 0.86);
-  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.94);
   padding: 13px 18px;
   overflow: hidden;
-  box-shadow: 0 12px 24px rgba(30, 41, 36, 0.08);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
 }
 
 .topbar-left {
@@ -222,7 +218,7 @@ pre {
   flex: 0 0 auto;
   min-height: 32px;
   border-color: var(--line);
-  background: #fbfdf9;
+  background: #ffffff;
   color: var(--moss-dark);
   box-shadow: none;
   padding: 5px 8px;
@@ -231,13 +227,13 @@ pre {
 }
 
 .view-switch-button:hover:not(:disabled) {
-  border-color: var(--moss);
-  background: #eef4f8;
+  border-color: var(--line-strong);
+  background: var(--surface-2);
 }
 
 .view-switch-button.active {
-  border-color: rgba(63, 111, 143, 0.5);
-  background: #e8f2f8;
+  border-color: rgba(32, 33, 35, 0.42);
+  background: #ececea;
   color: var(--moss-dark);
 }
 
@@ -261,7 +257,7 @@ pre {
   flex: 0 0 auto;
   min-height: 34px;
   border-color: var(--line);
-  background: #fbfdf9;
+  background: #ffffff;
   color: var(--moss-dark);
   box-shadow: none;
   padding: 6px 9px;
@@ -2377,4 +2373,146 @@ body.resizing-panels * {
   .question-candidate div {
     justify-content: flex-start;
   }
+}
+
+/* Codex light theme layer */
+.topbar {
+  border-bottom-color: var(--line);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
+}
+
+.panel {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: 0 16px 34px var(--shadow);
+}
+
+.view-switch-button,
+.icon-button,
+.topbar-tool-button,
+.secondary,
+.status-strip,
+.settings-switch,
+.file-button,
+.quality-brief,
+.scenario-grid div,
+.scenario-ask,
+.demo-brief,
+.empty,
+.diagnostic-card,
+.path-question,
+.question-candidate button,
+.defense-cards summary,
+.defense-card-head button,
+.metric-row span,
+.model-line span,
+.chat-session,
+.chat-session-empty,
+.chat-item {
+  background: #ffffff;
+}
+
+.view-switch-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled),
+.topbar-tool-button:hover:not(:disabled),
+.secondary:hover:not(:disabled),
+.file-button:hover,
+.quality-ask:hover:not(:disabled),
+.scenario-ask:hover:not(:disabled),
+.review-question:hover:not(:disabled),
+.question-candidate button:hover:not(:disabled),
+.defense-card-head button:hover:not(:disabled),
+.chat-session:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
+.view-switch-button.active,
+.model-badge-on,
+.chat-session-active,
+.defense-cards[open] summary,
+.checkpoint-item-done {
+  border-color: rgba(32, 33, 35, 0.32);
+  background: #ececea;
+  color: var(--ink);
+}
+
+.settings-button,
+.settings-active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.settings-button:hover:not(:disabled) {
+  border-color: #000000;
+  background: #000000;
+}
+
+.column-resizer::before,
+.panel-resizer::before {
+  background: rgba(32, 33, 35, 0.16);
+}
+
+.column-resizer:hover::before,
+.column-resizer.active::before,
+.panel-resizer:hover::before,
+.panel-resizer.active::before {
+  background: var(--moss);
+  box-shadow: 0 0 0 3px rgba(32, 33, 35, 0.1);
+}
+
+.modal-backdrop {
+  background: rgba(32, 33, 35, 0.22);
+}
+
+.settings-dialog,
+.chat-history-popover {
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.16);
+}
+
+.health-online {
+  background: var(--ink);
+  box-shadow: 0 0 0 4px rgba(32, 33, 35, 0.12);
+}
+
+.scenario-brief summary strong,
+.demo-brief-head strong,
+.checkpoint-title-row span,
+.relationship-item span {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.quality-panel-line {
+  border-left-color: rgba(32, 33, 35, 0.24);
+}
+
+.demo-step-active i,
+.demo-step-done i {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.demo-step-active i {
+  box-shadow: 0 0 0 4px rgba(32, 33, 35, 0.12);
+}
+
+.chat-user {
+  border-color: rgba(32, 33, 35, 0.18);
+  background: var(--surface-2);
+}
+
+.chat-thinking,
+.chat-formula {
+  border-color: var(--line-strong);
+  background: #f6f6f3;
+}
+
+.chat-formula,
+.chat-formula .math-html,
+.inline-math {
+  color: var(--ink);
 }
