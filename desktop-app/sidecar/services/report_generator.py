@@ -14,7 +14,7 @@ def generate_markdown_report(request: ReportRequest) -> ReportResponse:
         _section("建模提醒", _model_notes(request.model_type)),
     ]
     if request.inference_notes:
-        sections.append(_section("变量识别说明", request.inference_notes))
+        sections.append(_section("分析补充", request.inference_notes))
     return ReportResponse(markdown="\n\n".join(sections).strip() + "\n")
 
 

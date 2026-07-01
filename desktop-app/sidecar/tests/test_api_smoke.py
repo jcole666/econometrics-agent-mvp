@@ -135,3 +135,21 @@ def test_unsupported_complex_model_returns_business_error() -> None:
     body = response.json()
     assert body["success"] is False
     assert "暂不支持真实运行" in body["error"]
+
+
+def test_report_includes_analysis_notes() -> None:
+    response = client.post(
+        "/generate-report",
+        json={
+            "research_question": "数字经济发展是否会提升城市创新水平？",
+            "model_type": "Panel Fixed Effects",
+            "model_results": None,
+            "inference_notes": "- 关系线索：innovation_index 与 digital_economy_index 正相关。",
+            "llm_config": {"enabled": False},
+        },
+    )
+
+    assert response.status_code == 200
+    markdown = response.json()["markdown"]
+    assert "## 分析补充" in markdown
+    assert "关系线索" in markdown

@@ -469,6 +469,54 @@ function buildCollaborationCheckpoints({
   return checkpoints;
 }
 
+function buildReportNotes({
+  profile,
+  path,
+  recommendation,
+  inferenceReasoning
+}: {
+  profile: DataProfile | null;
+  path: ResearchPath | null;
+  recommendation: ModelRecommendation | null;
+  inferenceReasoning?: string | null;
+}): string {
+  const lines: string[] = [];
+
+  if (profile?.diagnostics) {
+    const diagnostics = profile.diagnostics;
+    const panel = diagnostics.panel_hint;
+    lines.push(`- 数据概览：${profile.rows} 行、${profile.columns_count} 列，总缺失率 ${formatPercent(diagnostics.missing_rate)}，重复行 ${diagnostics.duplicate_rows} 行。`);
+
+    if (panel) {
+      lines.push(`- 结构判断：数据接近 ${panel.entity_column} × ${panel.time_column} 的${panel.is_balanced ? "平衡" : "非平衡"}面板。`);
+    }
+
+    if (diagnostics.relationship_hints?.length) {
+      const hints = diagnostics.relationship_hints.slice(0, 3).map((item) => (
+        `${item.left} 与 ${item.right} ${item.direction}(${item.method}=${item.score.toFixed(3)})`
+      ));
+      lines.push(`- 关系线索：${hints.join("；")}。这些线索用于提出问题，不直接代表因果结论。`);
+    }
+  }
+
+  if (path) {
+    lines.push(`- 研究路径：当前主线为“${path.question}”，建议下一步关注：${path.nextSteps.slice(0, 3).join("；")}。`);
+    if (path.risks.length) {
+      lines.push(`- 风险边界：${path.risks.slice(0, 3).join("；")}。`);
+    }
+  }
+
+  if (recommendation) {
+    lines.push(`- 模型推荐：${modelLabel(recommendation.model)}。${recommendation.reason}`);
+  }
+
+  if (inferenceReasoning?.trim()) {
+    lines.push(`- 变量识别：${inferenceReasoning.trim()}`);
+  }
+
+  return lines.join("\n");
+}
+
 function missingModelSettings(settings: ModelSettings): string[] {
   const missing: string[] = [];
   if (!settings.enabled) missing.push("启用自定义模型");
@@ -1357,7 +1405,13 @@ export default function App() {
 
     setBusy("report");
     try {
-      const response = await generateReport(researchQuestion, modelType, runResult?.results ?? null, inference?.reasoning, llmConfig);
+      const notes = buildReportNotes({
+        profile,
+        path: researchPath,
+        recommendation,
+        inferenceReasoning: inference?.reasoning
+      });
+      const response = await generateReport(researchQuestion, modelType, runResult?.results ?? null, notes, llmConfig);
       setReport(response.markdown);
       setStatus("报告已生成。");
     } catch (error) {
