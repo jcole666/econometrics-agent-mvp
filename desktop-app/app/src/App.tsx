@@ -2181,6 +2181,7 @@ export default function App() {
               </button>
             </div>
             <div className="filename">{file?.name ?? "尚未选择文件"}</div>
+            <DemoScenarioBrief profile={profile} stage={demoStage} onAsk={prepareReviewQuestion} />
             <DataQualityBrief profile={profile} onAsk={prepareReviewQuestion} />
             <DemoFlow stage={demoStage} />
             <DemoBrief
@@ -2551,6 +2552,69 @@ function DemoFlow({ stage }: { stage: DemoStage }) {
         })}
       </div>
     </div>
+  );
+}
+
+function DemoScenarioBrief({
+  profile,
+  stage,
+  onAsk
+}: {
+  profile: DataProfile | null;
+  stage: DemoStage;
+  onAsk: (question: string) => void;
+}) {
+  if (stage === "idle" && !isDemoProfile(profile)) return null;
+
+  const fieldNotes = [
+    ["innovation_index", "城市创新水平"],
+    ["digital_economy_index", "数字经济发展水平"],
+    ["broadband_access", "数字基础设施"],
+    ["fiscal_science_spending", "财政科技支出"],
+    ["human_capital", "人力资本"],
+    ["industrial_upgrade", "产业结构升级"],
+    ["smart_city_pilot", "智慧城市试点"]
+  ];
+
+  return (
+    <details className="scenario-brief">
+      <summary>
+        <span>样例场景</span>
+        <strong>城市面板</strong>
+      </summary>
+      <p>
+        这个样例把多个城市跨年份数据放在一起，问题不是单纯写一段 OLS，而是先识别城市 × 年份结构，再讨论固定效应、控制变量和因果边界。
+      </p>
+      <div className="scenario-grid">
+        <div>
+          <span>研究对象</span>
+          <strong>数字经济与城市创新</strong>
+        </div>
+        <div>
+          <span>识别路径</span>
+          <strong>面板固定效应</strong>
+        </div>
+        <div>
+          <span>展示重点</span>
+          <strong>发现关系，不替代判断</strong>
+        </div>
+      </div>
+      <div className="scenario-field-list">
+        {fieldNotes.map(([name, label]) => (
+          <span key={name}>
+            <strong>{name}</strong>
+            {label}
+          </span>
+        ))}
+      </div>
+      <button
+        className="scenario-ask"
+        type="button"
+        onClick={() => onAsk("请帮我用答辩口吻解释这个城市面板样例为什么比普通 OLS 演示更有说服力。")}
+      >
+        追问场景价值
+      </button>
+    </details>
   );
 }
 
