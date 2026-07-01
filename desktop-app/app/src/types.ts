@@ -42,6 +42,15 @@ export interface ModelingWarning {
   reason: string;
 }
 
+export interface RelationshipHint {
+  left: string;
+  right: string;
+  method: string;
+  score: number;
+  direction: string;
+  note: string;
+}
+
 export interface PanelHint {
   entity_column: string;
   time_column: string;
@@ -67,6 +76,7 @@ export interface DataDiagnostics {
   categorical_summaries: CategoricalSummary[];
   outlier_columns: OutlierColumn[];
   modeling_warnings: ModelingWarning[];
+  relationship_hints: RelationshipHint[];
   panel_hint: PanelHint | null;
 }
 

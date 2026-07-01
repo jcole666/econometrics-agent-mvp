@@ -2053,6 +2053,26 @@ function DataDiagnosticsView({ profile }: { profile: DataProfile }) {
       </div>
 
       <div className="diagnostic-section">
+        <div className="diagnostic-title">关系线索</div>
+        {diagnostics.relationship_hints?.length ? (
+          <div className="relationship-list">
+            {diagnostics.relationship_hints.slice(0, 5).map((item) => (
+              <div className="relationship-item" key={`${item.left}-${item.right}`}>
+                <div>
+                  <strong>{item.left}</strong>
+                  <span>{item.direction}</span>
+                  <strong>{item.right}</strong>
+                </div>
+                <p>{item.method} = {item.score.toFixed(3)}；{item.note}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty compact-empty">暂未发现明显变量关系。</div>
+        )}
+      </div>
+
+      <div className="diagnostic-section">
         <div className="diagnostic-title">风险提示</div>
         <ul className="diagnostic-list">
           {riskItems.slice(0, 8).map((item) => (

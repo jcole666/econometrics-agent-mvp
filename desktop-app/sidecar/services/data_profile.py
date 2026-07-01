@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from itertools import combinations
+
 import pandas as pd
 from pandas.api import types as pd_types
 
@@ -50,6 +52,7 @@ def build_diagnostics(df: pd.DataFrame) -> dict:
         "categorical_summaries": _categorical_summaries(df),
         "outlier_columns": _outlier_columns(df),
         "modeling_warnings": _modeling_warnings(df),
+        "relationship_hints": _relationship_hints(df, time_candidates),
         "panel_hint": _panel_hint(df, entity_candidates, time_candidates),
     }
 
@@ -204,6 +207,46 @@ def _modeling_warnings(df: pd.DataFrame) -> list[dict]:
         if not pd_types.is_numeric_dtype(series) and any(key in lowered for key in ("city", "province", "region", "城市", "省份", "地区")):
             warnings.append({"name": label, "reason": "地区标识更适合做固定效应、分组或虚拟变量"})
     return warnings
+
+
+def _relationship_hints(df: pd.DataFrame, time_candidates: list[str]) -> list[dict]:
+    time_set = set(time_candidates)
+    numeric_columns = [
+        name
+        for name in df.columns
+        if str(name) not in time_set
+        and pd_types.is_numeric_dtype(df[name])
+        and int(df[name].nunique(dropna=True)) > 1
+    ]
+    hints = []
+
+    for left, right in combinations(numeric_columns, 2):
+        pair = df[[left, right]].apply(pd.to_numeric, errors="coerce").dropna()
+        if len(pair) < 8:
+            continue
+
+        score = pair[left].corr(pair[right])
+        if pd.isna(score) or abs(score) < 0.5:
+            continue
+
+        hints.append(
+            {
+                "left": str(left),
+                "right": str(right),
+                "method": "Pearson",
+                "score": round(float(score), 3),
+                "direction": "正相关" if score > 0 else "负相关",
+                "note": _relationship_note(float(score)),
+            }
+        )
+
+    return sorted(hints, key=lambda item: abs(item["score"]), reverse=True)[:8]
+
+
+def _relationship_note(score: float) -> str:
+    if abs(score) >= 0.8:
+        return "关系很强，适合作为重点线索；建模时也要检查共同趋势和多重共线性。"
+    return "关系较明显，可以放进研究路径里继续验证；它本身还不是因果证据。"
 
 
 def _panel_hint(df: pd.DataFrame, entity_candidates: list[str], time_candidates: list[str]) -> dict | None:

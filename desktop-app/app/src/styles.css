@@ -708,6 +708,52 @@ body.resizing-columns * {
   color: var(--moss-dark);
 }
 
+.relationship-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.relationship-item {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  padding: 7px;
+}
+
+.relationship-item div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.relationship-item strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.relationship-item span {
+  border-radius: 4px;
+  background: #f0f4f1;
+  color: var(--moss-dark);
+  padding: 2px 5px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.relationship-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.compact-empty {
+  padding: 8px;
+}
+
 .diagnostic-list {
   margin: 0;
   padding-left: 18px;

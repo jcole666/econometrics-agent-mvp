@@ -33,6 +33,11 @@ def test_sample_profile_includes_diagnostics() -> None:
     assert diagnostics["panel_hint"]["entity_column"] == "city"
     assert diagnostics["panel_hint"]["time_column"] == "year"
     assert diagnostics["panel_hint"]["is_balanced"] is True
+    assert diagnostics["relationship_hints"]
+    assert any(
+        {hint["left"], hint["right"]} == {"innovation_index", "digital_economy_index"}
+        for hint in diagnostics["relationship_hints"]
+    )
 
 
 def test_variable_inference_for_city_panel_question() -> None:
