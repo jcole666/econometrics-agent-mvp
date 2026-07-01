@@ -353,9 +353,16 @@ h1 {
 }
 
 body.resizing-columns,
-body.resizing-columns * {
+body.resizing-columns *,
+body.resizing-panels,
+body.resizing-panels * {
   cursor: col-resize !important;
   user-select: none !important;
+}
+
+body.resizing-panels,
+body.resizing-panels * {
+  cursor: row-resize !important;
 }
 
 .modal-backdrop {
@@ -481,6 +488,11 @@ body.resizing-columns * {
   overflow-y: auto;
 }
 
+.rail-main,
+.rail-right {
+  overflow-y: auto;
+}
+
 .panel {
   min-height: 0;
   border: 1px solid rgba(168, 184, 176, 0.82);
@@ -511,6 +523,45 @@ body.resizing-columns * {
 .rail-main .panel,
 .rail-right .panel {
   flex: 1 1 0;
+}
+
+.panel.resizable-panel {
+  flex: 0 0 var(--panel-height) !important;
+  min-height: var(--panel-min-height);
+}
+
+.rail-left .panel.resizable-panel {
+  overflow: auto;
+}
+
+.panel-resizer {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 10px;
+  min-height: 10px;
+  margin: -6px 0;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.panel-resizer::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 22px;
+  right: 22px;
+  height: 1px;
+  border-radius: 999px;
+  background: rgba(126, 142, 134, 0.28);
+  transform: translateY(-50%);
+  transition: background 120ms ease, box-shadow 120ms ease, height 120ms ease;
+}
+
+.panel-resizer:hover::before,
+.panel-resizer.active::before {
+  height: 3px;
+  background: var(--moss);
+  box-shadow: 0 0 0 3px rgba(93, 113, 103, 0.12);
 }
 
 .panel-title {
@@ -734,6 +785,41 @@ body.resizing-columns * {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.review-questions {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.review-questions-title {
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.review-question-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.review-question {
+  min-height: 27px;
+  border-color: var(--line);
+  background: #fff;
+  color: var(--moss-dark);
+  box-shadow: none;
+  padding: 4px 7px;
+  font-size: 12px;
+}
+
+.review-question:hover:not(:disabled) {
+  border-color: rgba(63, 111, 143, 0.48);
+  background: #eef4f8;
+  color: var(--moss-dark);
 }
 
 .wide {
@@ -1686,6 +1772,14 @@ body.resizing-columns * {
 
   .column-resizer {
     display: none;
+  }
+
+  .panel-resizer {
+    display: none;
+  }
+
+  .panel.resizable-panel {
+    flex: 0 0 auto !important;
   }
 
   .status-strip {

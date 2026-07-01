@@ -61,12 +61,29 @@ const SETTINGS_KEY = "econometrics-agent.model-settings";
 const CHAT_SESSIONS_KEY = "econometrics-agent.chat-sessions";
 const ACTIVE_CHAT_KEY = "econometrics-agent.active-chat";
 const LAYOUT_WIDTHS_KEY = "econometrics-agent.layout-widths";
+const PANEL_HEIGHTS_KEY = "econometrics-agent.panel-heights";
 
 const DEFAULT_RAIL_WIDTHS = { left: 330, right: 360 };
 const MIN_LEFT_RAIL = 280;
 const MIN_MAIN_RAIL = 420;
 const MIN_RIGHT_RAIL = 320;
 const COLUMN_RESIZER_WIDTH = 12;
+const DEFAULT_PANEL_HEIGHTS = {
+  left: { data: 430, question: 220, variables: 420, report: 310 },
+  main: { profile: 300, path: 360, recommendation: 280, result: 280 },
+  right: { chat: 660 }
+};
+const PANEL_MIN_HEIGHTS = {
+  data: 300,
+  question: 170,
+  variables: 280,
+  report: 220,
+  profile: 220,
+  path: 240,
+  recommendation: 220,
+  result: 220,
+  chat: 360
+};
 const DEMO_MODEL_TYPE = "Panel Fixed Effects";
 const DEMO_ENTITY_COLUMN = "city";
 const DEMO_TIME_COLUMN = "year";
@@ -75,12 +92,33 @@ type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "
 type DemoStage = "idle" | "data" | "recommend" | "run" | "report" | "ready" | "error";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
+type RailId = keyof typeof DEFAULT_PANEL_HEIGHTS;
+type PanelId = keyof typeof PANEL_MIN_HEIGHTS;
+type PanelHeights = Record<RailId, Partial<Record<PanelId, number>>>;
 
 const DEMO_FLOW_STEPS: Array<{ stage: DemoStage; title: string; detail: string }> = [
   { stage: "data", title: "加载样例", detail: "城市 × 年份面板数据" },
   { stage: "recommend", title: "推荐模型", detail: "面板固定效应路径" },
   { stage: "run", title: "运行结果", detail: "系数、显著性和 R2" },
   { stage: "report", title: "生成报告", detail: "Markdown 草稿" }
+];
+const DEMO_REVIEW_QUESTIONS = [
+  {
+    label: "因果边界",
+    question: "这条结果能不能解释为因果？还需要补哪些识别假设和稳健性检验？"
+  },
+  {
+    label: "数据质量",
+    question: "字段画像里哪些数据质量风险最值得先查？这些风险会怎样影响模型解释？"
+  },
+  {
+    label: "项目差异",
+    question: "这个演示相比直接让普通 LLM 写一个 OLS，有什么不一样？"
+  },
+  {
+    label: "现场回应",
+    question: "如果老师质疑样例数据规模不大，我应该怎么回应这个 Demo 的价值？"
+  }
 ];
 
 interface RailWidths {
@@ -93,6 +131,15 @@ interface ResizeSession {
   startX: number;
   left: number;
   right: number;
+}
+
+interface PanelResizeSession {
+  rail: RailId;
+  upper: PanelId;
+  lower: PanelId | null;
+  startY: number;
+  upperHeight: number;
+  lowerHeight: number | null;
 }
 
 interface ResearchPath {
@@ -218,6 +265,39 @@ function loadRailWidths(): RailWidths {
   } catch {
     return DEFAULT_RAIL_WIDTHS;
   }
+}
+
+function panelMinHeight(panelId: PanelId): number {
+  return PANEL_MIN_HEIGHTS[panelId] ?? 180;
+}
+
+function defaultPanelHeight(rail: RailId, panelId: PanelId): number {
+  const defaults = DEFAULT_PANEL_HEIGHTS[rail] as Partial<Record<PanelId, number>>;
+  return defaults[panelId] ?? panelMinHeight(panelId);
+}
+
+function loadPanelHeights(): PanelHeights {
+  const heights: PanelHeights = { left: {}, main: {}, right: {} };
+
+  try {
+    const raw = localStorage.getItem(PANEL_HEIGHTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+
+    (Object.keys(DEFAULT_PANEL_HEIGHTS) as RailId[]).forEach((rail) => {
+      const defaults = DEFAULT_PANEL_HEIGHTS[rail] as Partial<Record<PanelId, number>>;
+      Object.keys(defaults).forEach((key) => {
+        const panelId = key as PanelId;
+        const value = parsed?.[rail]?.[panelId];
+        heights[rail][panelId] = Math.max(panelMinHeight(panelId), readableWidth(value, defaultPanelHeight(rail, panelId)));
+      });
+    });
+  } catch {
+    (Object.keys(DEFAULT_PANEL_HEIGHTS) as RailId[]).forEach((rail) => {
+      heights[rail] = { ...(DEFAULT_PANEL_HEIGHTS[rail] as Partial<Record<PanelId, number>>) };
+    });
+  }
+
+  return heights;
 }
 
 function toLLMConfig(settings: ModelSettings): LLMConfig {
@@ -1092,16 +1172,20 @@ export default function App() {
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
   const [railWidths, setRailWidths] = useState<RailWidths>(() => loadRailWidths());
+  const [panelHeights, setPanelHeights] = useState<PanelHeights>(() => loadPanelHeights());
   const [resizeEdge, setResizeEdge] = useState<ResizeEdge | null>(null);
+  const [panelResizeKey, setPanelResizeKey] = useState<string | null>(null);
   const [confirmedCheckpoints, setConfirmedCheckpoints] = useState<string[]>([]);
   const workspaceRef = useRef<HTMLElement | null>(null);
   const resizeSessionRef = useRef<ResizeSession | null>(null);
+  const panelResizeSessionRef = useRef<PanelResizeSession | null>(null);
   const chatLogRef = useRef<HTMLDivElement | null>(null);
   const chatHistoryRef = useRef<HTMLDivElement | null>(null);
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const columnsInputRef = useRef<HTMLInputElement | null>(null);
   const dependentInputRef = useRef<HTMLInputElement | null>(null);
   const independentInputRef = useRef<HTMLInputElement | null>(null);
+  const chatInputRef = useRef<HTMLInputElement | null>(null);
 
   const columns = useMemo(() => splitList(columnsInput.trim() ? columnsInput : DEFAULT_COLUMNS), [columnsInput]);
   const llmConfig = useMemo(() => toLLMConfig(modelSettings), [modelSettings]);
@@ -1179,6 +1263,41 @@ export default function App() {
     document.body.classList.add("resizing-columns");
   }
 
+  function currentPanelHeight(rail: RailId, panelId: PanelId): number {
+    return panelHeights[rail]?.[panelId] ?? defaultPanelHeight(rail, panelId);
+  }
+
+  function panelStyle(rail: RailId, panelId: PanelId): CSSProperties {
+    return {
+      "--panel-height": `${currentPanelHeight(rail, panelId)}px`,
+      "--panel-min-height": `${panelMinHeight(panelId)}px`
+    } as CSSProperties;
+  }
+
+  function startPanelResize(rail: RailId, upper: PanelId, lower: PanelId | null, event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+
+    event.preventDefault();
+    panelResizeSessionRef.current = {
+      rail,
+      upper,
+      lower,
+      startY: event.clientY,
+      upperHeight: currentPanelHeight(rail, upper),
+      lowerHeight: lower ? currentPanelHeight(rail, lower) : null
+    };
+    setPanelResizeKey(lower ? `${rail}:${upper}:${lower}` : `${rail}:${upper}`);
+    document.body.classList.add("resizing-panels");
+  }
+
+  function resetPanelRail(rail: RailId) {
+    setPanelHeights((current) => ({
+      ...current,
+      [rail]: { ...(DEFAULT_PANEL_HEIGHTS[rail] as Partial<Record<PanelId, number>>) }
+    }));
+    setStatus("已恢复当前列的板块高度。");
+  }
+
   useEffect(() => {
     getHealth()
       .then(() => setHealth("online"))
@@ -1193,6 +1312,13 @@ export default function App() {
   }, [railWidths]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(PANEL_HEIGHTS_KEY, JSON.stringify(panelHeights));
+    } catch {
+    }
+  }, [panelHeights]);
+
+  useEffect(() => {
     setConfirmedCheckpoints([]);
   }, [dependentVariable, entityColumn, independentVariables, instrumentVariable, profile, question, recommendation?.model, runningVariable, timeColumn, treatmentColumn]);
 
@@ -1203,32 +1329,68 @@ export default function App() {
 
     const moveResize = (event: PointerEvent) => {
       const session = resizeSessionRef.current;
-      if (!session) return;
+      if (session) {
+        const railSpace = workspaceRailSpace();
+        const dx = event.clientX - session.startX;
 
-      const railSpace = workspaceRailSpace();
-      const dx = event.clientX - session.startX;
+        if (session.edge === "left") {
+          const maxLeft = railSpace - session.right - MIN_MAIN_RAIL;
+          setRailWidths((current) => ({
+            ...current,
+            left: clamp(session.left + dx, MIN_LEFT_RAIL, maxLeft)
+          }));
+          return;
+        }
 
-      if (session.edge === "left") {
-        const maxLeft = railSpace - session.right - MIN_MAIN_RAIL;
+        const maxRight = railSpace - session.left - MIN_MAIN_RAIL;
         setRailWidths((current) => ({
           ...current,
-          left: clamp(session.left + dx, MIN_LEFT_RAIL, maxLeft)
+          right: clamp(session.right - dx, MIN_RIGHT_RAIL, maxRight)
         }));
         return;
       }
 
-      const maxRight = railSpace - session.left - MIN_MAIN_RAIL;
-      setRailWidths((current) => ({
+      const panelSession = panelResizeSessionRef.current;
+      if (!panelSession) return;
+
+      const dy = event.clientY - panelSession.startY;
+      const upperMin = panelMinHeight(panelSession.upper);
+      if (!panelSession.lower) {
+        const upperHeight = clamp(panelSession.upperHeight + dy, upperMin, Math.max(upperMin, window.innerHeight * 1.6));
+        setPanelHeights((current) => ({
+          ...current,
+          [panelSession.rail]: {
+            ...current[panelSession.rail],
+            [panelSession.upper]: upperHeight
+          }
+        }));
+        return;
+      }
+
+      const lower = panelSession.lower;
+      const lowerMin = panelMinHeight(lower);
+      const totalHeight = panelSession.upperHeight + (panelSession.lowerHeight ?? 0);
+      const upperHeight = clamp(panelSession.upperHeight + dy, upperMin, totalHeight - lowerMin);
+      const lowerHeight = totalHeight - upperHeight;
+
+      setPanelHeights((current) => ({
         ...current,
-        right: clamp(session.right - dx, MIN_RIGHT_RAIL, maxRight)
+        [panelSession.rail]: {
+          ...current[panelSession.rail],
+          [panelSession.upper]: upperHeight,
+          [lower]: lowerHeight
+        }
       }));
     };
 
     const stopResize = () => {
-      if (!resizeSessionRef.current) return;
+      if (!resizeSessionRef.current && !panelResizeSessionRef.current) return;
       resizeSessionRef.current = null;
+      panelResizeSessionRef.current = null;
       setResizeEdge(null);
+      setPanelResizeKey(null);
       document.body.classList.remove("resizing-columns");
+      document.body.classList.remove("resizing-panels");
     };
 
     window.addEventListener("pointermove", moveResize);
@@ -1245,6 +1407,7 @@ export default function App() {
       window.removeEventListener("resize", fitToWindow);
       window.removeEventListener("blur", stopResize);
       document.body.classList.remove("resizing-columns");
+      document.body.classList.remove("resizing-panels");
     };
   }, []);
 
@@ -1638,6 +1801,13 @@ export default function App() {
     setStatus("已打开历史会话。");
   }
 
+  function prepareReviewQuestion(questionText: string) {
+    setChatInput(questionText);
+    setChatHistoryOpen(false);
+    setStatus("已放入评审追问，确认后可以发送给小计。");
+    window.setTimeout(() => chatInputRef.current?.focus(), 0);
+  }
+
   async function sendChat() {
     const message = chatInput.trim();
     if (!message || !currentChat) return;
@@ -1818,7 +1988,7 @@ export default function App() {
 
       <section className="workspace" ref={workspaceRef} style={workspaceStyle}>
         <aside className="rail rail-left">
-          <Panel title="数据" icon={<Database size={17} />}>
+          <Panel title="数据" icon={<Database size={17} />} style={panelStyle("left", "data")}>
             <div className="file-row">
               <label className="file-button" title="选择数据文件">
                 <FileUp size={16} />
@@ -1842,14 +2012,21 @@ export default function App() {
               recommendation={recommendation}
               runResult={runResult}
               stage={demoStage}
+              onAsk={prepareReviewQuestion}
             />
             <button className="wide" type="button" onClick={loadProfile} disabled={!file || isWorking}>
               <RefreshCw size={16} />
               <span>生成字段画像</span>
             </button>
           </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "left:data:question"}
+            label="调整数据和研究问题高度"
+            onPointerDown={(event) => startPanelResize("left", "data", "question", event)}
+            onDoubleClick={() => resetPanelRail("left")}
+          />
 
-          <Panel title="研究问题" icon={<MessageSquare size={17} />}>
+          <Panel title="研究问题" icon={<MessageSquare size={17} />} style={panelStyle("left", "question")}>
             <textarea
               ref={questionInputRef}
               className="question-input"
@@ -1867,8 +2044,14 @@ export default function App() {
               onChange={(event) => setColumnsInput(event.target.value)}
             />
           </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "left:question:variables"}
+            label="调整研究问题和变量配置高度"
+            onPointerDown={(event) => startPanelResize("left", "question", "variables", event)}
+            onDoubleClick={() => resetPanelRail("left")}
+          />
 
-          <Panel title="变量配置" icon={<Wand2 size={17} />} className="variables-panel">
+          <Panel title="变量配置" icon={<Wand2 size={17} />} className="variables-panel" style={panelStyle("left", "variables")}>
             <div className="two-buttons">
               <button type="button" onClick={infer} disabled={isWorking}>
                 <Sparkles size={16} />
@@ -1903,8 +2086,14 @@ export default function App() {
               <Input label="工具变量" value={instrumentVariable} onChange={setInstrumentVariable} />
             </div>
           </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "left:variables:report"}
+            label="调整变量配置和分析报告高度"
+            onPointerDown={(event) => startPanelResize("left", "variables", "report", event)}
+            onDoubleClick={() => resetPanelRail("left")}
+          />
 
-          <Panel title="分析报告" icon={<FileText size={17} />} className="report-panel">
+          <Panel title="分析报告" icon={<FileText size={17} />} className="report-panel" style={panelStyle("left", "report")}>
             <div className="report-actions">
               <button type="button" onClick={makeReport} disabled={isWorking}>
                 <FileText size={16} />
@@ -1930,11 +2119,17 @@ export default function App() {
         />
 
         <section className="rail rail-main">
-          <Panel title="字段画像" icon={<TableProperties size={17} />}>
+          <Panel title="字段画像" icon={<TableProperties size={17} />} style={panelStyle("main", "profile")}>
             <ProfileTable profile={profile} />
           </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "main:profile:path"}
+            label="调整字段画像和研究路径高度"
+            onPointerDown={(event) => startPanelResize("main", "profile", "path", event)}
+            onDoubleClick={() => resetPanelRail("main")}
+          />
 
-          <Panel title="研究路径" icon={<Sparkles size={17} />}>
+          <Panel title="研究路径" icon={<Sparkles size={17} />} style={panelStyle("main", "path")}>
             <ResearchPathView path={researchPath} />
             <CollaborationCheckpoints
               checkpoints={collaborationCheckpoints}
@@ -1943,8 +2138,14 @@ export default function App() {
               onFocus={focusCheckpointTarget}
             />
           </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "main:path:recommendation"}
+            label="调整研究路径和模型推荐高度"
+            onPointerDown={(event) => startPanelResize("main", "path", "recommendation", event)}
+            onDoubleClick={() => resetPanelRail("main")}
+          />
 
-          <Panel title="模型推荐" icon={<Cpu size={17} />}>
+          <Panel title="模型推荐" icon={<Cpu size={17} />} style={panelStyle("main", "recommendation")}>
             <div className="runbar">
               <select value={modelType} onChange={(event) => setModelType(event.target.value)}>
                 {MODEL_OPTIONS.map((item) => (
@@ -1958,8 +2159,14 @@ export default function App() {
             </div>
             <RecommendationView recommendation={recommendation} notice={recommendationNotice} />
           </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "main:recommendation:result"}
+            label="调整模型推荐和模型结果高度"
+            onPointerDown={(event) => startPanelResize("main", "recommendation", "result", event)}
+            onDoubleClick={() => resetPanelRail("main")}
+          />
 
-          <Panel title="模型结果" icon={<Activity size={17} />}>
+          <Panel title="模型结果" icon={<Activity size={17} />} style={panelStyle("main", "result")}>
             <RunResultView result={runResult} notice={runNotice} />
           </Panel>
         </section>
@@ -1971,7 +2178,7 @@ export default function App() {
         />
 
         <aside className="rail rail-right">
-          <Panel title="建模问答" icon={<MessageSquare size={17} />} className="chat-panel">
+          <Panel title="建模问答" icon={<MessageSquare size={17} />} className="chat-panel" style={panelStyle("right", "chat")}>
             <div className="chat-tools">
               <button className="secondary chat-new-button" type="button" onClick={newChat} title="新建会话">
                 <Plus size={15} />
@@ -2033,6 +2240,7 @@ export default function App() {
             </div>
             <div className="send-row">
               <input
+                ref={chatInputRef}
                 className="chat-input"
                 value={chatInput}
                 placeholder={CHAT_PLACEHOLDER}
@@ -2044,6 +2252,12 @@ export default function App() {
               </button>
             </div>
           </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "right:chat"}
+            label="调整建模问答高度"
+            onPointerDown={(event) => startPanelResize("right", "chat", null, event)}
+            onDoubleClick={() => resetPanelRail("right")}
+          />
         </aside>
       </section>
     </main>
@@ -2054,15 +2268,18 @@ function Panel({
   title,
   icon,
   children,
-  className
+  className,
+  style
 }: {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  style?: CSSProperties;
 }) {
+  const classes = ["panel", style ? "resizable-panel" : "", className ?? ""].filter(Boolean).join(" ");
   return (
-    <section className={className ? `panel ${className}` : "panel"}>
+    <section className={classes} style={style}>
       <div className="panel-title">
         {icon}
         <h2>{title}</h2>
@@ -2088,6 +2305,30 @@ function ColumnResizeHandle({
       aria-label={label}
       aria-orientation="vertical"
       onPointerDown={onPointerDown}
+    />
+  );
+}
+
+function PanelResizeHandle({
+  active,
+  label,
+  onPointerDown,
+  onDoubleClick
+}: {
+  active: boolean;
+  label: string;
+  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onDoubleClick: () => void;
+}) {
+  return (
+    <div
+      className={active ? "panel-resizer active" : "panel-resizer"}
+      role="separator"
+      aria-label={label}
+      aria-orientation="horizontal"
+      title="拖动调整上下高度，双击恢复本列高度"
+      onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
     />
   );
 }
@@ -2122,13 +2363,15 @@ function DemoBrief({
   path,
   recommendation,
   runResult,
-  stage
+  stage,
+  onAsk
 }: {
   profile: DataProfile | null;
   path: ResearchPath | null;
   recommendation: ModelRecommendation | null;
   runResult: RunModelResponse | null;
   stage: DemoStage;
+  onAsk: (question: string) => void;
 }) {
   if (stage === "idle" && !isDemoProfile(profile)) return null;
 
@@ -2159,6 +2402,16 @@ function DemoBrief({
         <div>
           <span>4</span>
           <p>{resultText}</p>
+        </div>
+      </div>
+      <div className="review-questions">
+        <div className="review-questions-title">评审追问</div>
+        <div className="review-question-list">
+          {DEMO_REVIEW_QUESTIONS.map((item) => (
+            <button className="review-question" type="button" key={item.label} onClick={() => onAsk(item.question)}>
+              {item.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>
