@@ -142,6 +142,29 @@ def test_ols_runner_returns_coefficients() -> None:
     assert body["results"]["coefficients"]
 
 
+def test_panel_fixed_effects_runner_returns_coefficients() -> None:
+    with SAMPLE_PATH.open("rb") as handle:
+        response = client.post(
+            "/run-model",
+            files={"file": ("sample_city_panel.csv", handle, "text/csv")},
+            data={
+                "model_type": "Panel Fixed Effects",
+                "dependent_variable": "innovation_index",
+                "independent_variables": "digital_economy_index,broadband_access,fiscal_science_spending,human_capital,industrial_upgrade,population_density",
+                "entity_column": "city",
+                "time_column": "year",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["model_type"] == "Panel Fixed Effects"
+    assert body["results"]["sample_size"] == 48
+    assert any(item["variable"] == "digital_economy_index" for item in body["results"]["coefficients"])
+    assert any("固定效应" in item for item in body["warnings"])
+
+
 def test_unsupported_complex_model_returns_business_error() -> None:
     with SAMPLE_PATH.open("rb") as handle:
         response = client.post(

@@ -125,14 +125,21 @@ async def run_model_endpoint(
     running_variable: str | None = Form(None),
     instrument_variable: str | None = Form(None),
 ) -> RunModelResponse:
-    _ = (entity_column, time_column, treatment_column, running_variable, instrument_variable)
+    _ = (treatment_column, running_variable, instrument_variable)
     try:
         df = await read_upload_dataframe(file)
     except ValueError as exc:
         return RunModelResponse(model_type=model_type, success=False, error=str(exc))
 
     xs = [item.strip() for item in independent_variables.split(",") if item.strip()]
-    return run_model(df=df, model_type=model_type, dependent_variable=dependent_variable, independent_variables=xs)
+    return run_model(
+        df=df,
+        model_type=model_type,
+        dependent_variable=dependent_variable,
+        independent_variables=xs,
+        entity_column=entity_column,
+        time_column=time_column,
+    )
 
 
 @app.post("/chat", response_model=ChatResponse)
