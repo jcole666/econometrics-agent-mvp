@@ -70,17 +70,17 @@ const MIN_MAIN_RAIL = 420;
 const MIN_RIGHT_RAIL = 320;
 const COLUMN_RESIZER_WIDTH = 12;
 const DEFAULT_PANEL_HEIGHTS = {
-  left: { data: 430, question: 220, variables: 420, report: 310 },
+  left: { data: 540, question: 220, variables: 420, report: 310 },
   main: { profile: 300, path: 360, recommendation: 280, result: 280 },
   right: { chat: 660 }
 };
 const DEMO_PANEL_HEIGHTS = {
-  left: { data: 500, question: 210, variables: 330, report: 360 },
+  left: { data: 640, question: 210, variables: 330, report: 360 },
   main: { profile: 300, path: 430, recommendation: 280, result: 330 },
   right: { chat: 760 }
 };
 const PANEL_MIN_HEIGHTS = {
-  data: 300,
+  data: 360,
   question: 170,
   variables: 280,
   report: 220,
@@ -195,6 +195,12 @@ type ChatMarkdownBlock =
   | { kind: "code"; language: string; code: string }
   | { kind: "formula"; text: string }
   | { kind: "rule" };
+
+interface DemoScriptSection {
+  time: string;
+  title: string;
+  text: string;
+}
 
 const MODEL_OPTIONS = [
   { value: "OLS", label: "OLS 线性回归" },
@@ -436,6 +442,60 @@ function demoResultText(result: RunModelResponse | null): string {
   }
 
   return `${primary.variable} 为${coefficientDirection(primary.coefficient)}，系数 ${formatNumber(primary.coefficient)}，${significanceText(primary.p_value)}。`;
+}
+
+function buildDemoScript({
+  profile,
+  path,
+  recommendation,
+  runResult
+}: {
+  profile: DataProfile | null;
+  path: ResearchPath | null;
+  recommendation: ModelRecommendation | null;
+  runResult: RunModelResponse | null;
+}): DemoScriptSection[] {
+  const questionText = path?.question ?? DEFAULT_QUESTION;
+  const model = recommendation?.model ?? path?.model ?? DEMO_MODEL_TYPE;
+  const dataText = buildDataSummary(profile) ?? "先加载样例数据，再展示字段画像、缺失情况和变量关系线索";
+  const findingText = demoFindingText(profile);
+  const resultText = demoResultText(runResult);
+  const r2Text = hasNumber(runResult?.results?.r_squared) ? `R2=${formatNumber(runResult?.results?.r_squared)}。` : "";
+  const riskText = path?.risks[0] ?? resultBoundary(model);
+  const nextStepText = path?.nextSteps.slice(0, 2).join("；") || "补充稳健性检验和替代变量设定";
+
+  return [
+    {
+      time: "0:00",
+      title: "开场",
+      text: `各位老师好，我们做的是“小计”，一个面向社科研究生的计量建模工作台。今天用“${questionText}”演示完整流程。`
+    },
+    {
+      time: "0:25",
+      title: "数据",
+      text: `软件先读取数据并生成字段画像。当前样例是：${dataText}。这一步不是直接跑回归，而是先让研究者看清数据结构。`
+    },
+    {
+      time: "0:55",
+      title: "发现",
+      text: `${findingText}小计把这类线索整理成可追问的问题，但不会把相关性直接说成因果。`
+    },
+    {
+      time: "1:25",
+      title: "建模",
+      text: `在确认 Y、X、个体列和时间列后，系统推荐 ${modelLabel(model)}。研究者可以在变量配置和检查点里继续干预，而不是全自动黑箱输出。`
+    },
+    {
+      time: "2:00",
+      title: "结果",
+      text: `${resultText}${r2Text ? ` ${r2Text}` : ""}现场重点不是只报一个系数，而是同步解释方向、显著性和可用边界。`
+    },
+    {
+      time: "2:35",
+      title: "收尾",
+      text: `所以这个 Demo 展示的是“人机协作做计量分析”：小计负责整理路径、暴露风险、生成草稿，研究者负责判断假设。下一步会继续做：${nextStepText}。当前需要特别说明：${riskText}`
+    }
+  ];
 }
 
 function firstExistingColumn(profile: DataProfile, names: string[]): string | null {
@@ -2018,6 +2078,13 @@ export default function App() {
               stage={demoStage}
               onAsk={prepareReviewQuestion}
             />
+            <DemoScript
+              profile={profile}
+              path={researchPath}
+              recommendation={recommendation}
+              runResult={runResult}
+              stage={demoStage}
+            />
             <button className="wide" type="button" onClick={loadProfile} disabled={!file || isWorking}>
               <RefreshCw size={16} />
               <span>生成字段画像</span>
@@ -2429,6 +2496,44 @@ function DemoBrief({
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DemoScript({
+  profile,
+  path,
+  recommendation,
+  runResult,
+  stage
+}: {
+  profile: DataProfile | null;
+  path: ResearchPath | null;
+  recommendation: ModelRecommendation | null;
+  runResult: RunModelResponse | null;
+  stage: DemoStage;
+}) {
+  if (stage === "idle" && !isDemoProfile(profile)) return null;
+
+  const sections = buildDemoScript({ profile, path, recommendation, runResult });
+
+  return (
+    <div className="demo-script">
+      <div className="demo-script-head">
+        <span>路演稿</span>
+        <strong>3 分钟</strong>
+      </div>
+      <div className="demo-script-list">
+        {sections.map((section) => (
+          <div className="demo-script-item" key={section.time}>
+            <span>{section.time}</span>
+            <div>
+              <strong>{section.title}</strong>
+              <p>{section.text}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -840,6 +840,69 @@ body.resizing-panels * {
   color: var(--moss-dark);
 }
 
+.demo-script {
+  margin: 0 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 10px;
+}
+
+.demo-script-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.demo-script-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.demo-script-head strong {
+  border: 1px solid rgba(164, 127, 43, 0.38);
+  border-radius: 4px;
+  background: #fbf7e8;
+  color: var(--gold);
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.demo-script-list {
+  display: grid;
+  gap: 8px;
+}
+
+.demo-script-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.demo-script-item > span {
+  color: var(--moss-dark);
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.demo-script-item strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.demo-script-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .wide {
   width: 100%;
 }
