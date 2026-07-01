@@ -68,6 +68,7 @@ const COLUMN_RESIZER_WIDTH = 12;
 
 type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample";
 type ResizeEdge = "left" | "right";
+type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
 
 interface RailWidths {
   left: number;
@@ -92,6 +93,14 @@ interface ResearchPath {
   assumptions: string[];
   risks: string[];
   nextSteps: string[];
+}
+
+interface CollaborationCheckpoint {
+  id: string;
+  target: CheckpointTarget;
+  title: string;
+  detail: string;
+  badge: string;
 }
 
 interface ModelSettings {
@@ -394,6 +403,70 @@ function buildResearchPath({
     risks: risksFromProfile(profile, model),
     nextSteps: nextStepsForPath(model),
   };
+}
+
+function buildCollaborationCheckpoints({
+  profile,
+  path,
+  question,
+  dependentVariable,
+  independentVariables,
+  recommendation,
+}: {
+  profile: DataProfile | null;
+  path: ResearchPath | null;
+  question: string;
+  dependentVariable: string;
+  independentVariables: string;
+  recommendation: ModelRecommendation | null;
+}): CollaborationCheckpoint[] {
+  const checkpoints: CollaborationCheckpoint[] = [];
+  const hasQuestion = Boolean(question.trim());
+  const hasVariables = Boolean(dependentVariable.trim() && independentVariables.trim());
+
+  checkpoints.push({
+    id: "question",
+    target: "question",
+    title: "研究问题",
+    detail: hasQuestion ? question.trim() : "先把问题写成“X 是否影响 Y”的形式。",
+    badge: hasQuestion ? "待确认" : "待填写"
+  });
+
+  checkpoints.push({
+    id: "data",
+    target: "data",
+    title: "数据结构",
+    detail: path?.structure ?? "先加载数据并生成字段画像。",
+    badge: profile ? "已画像" : "待画像"
+  });
+
+  checkpoints.push({
+    id: "variables",
+    target: "variables",
+    title: "变量设定",
+    detail: hasVariables
+      ? `Y：${dependentVariable.trim()}；X：${splitList(independentVariables).slice(0, 4).join(", ")}`
+      : "先确认被解释变量和核心解释变量。",
+    badge: hasVariables ? "待确认" : "待补全"
+  });
+
+  checkpoints.push({
+    id: "recommendation",
+    target: "recommendation",
+    title: "识别策略",
+    detail: recommendation?.reason ?? (path ? `当前倾向：${modelLabel(path.model)}` : "生成模型推荐后再确认识别策略。"),
+    badge: recommendation ? modelLabel(recommendation.model) : "待推荐"
+  });
+
+  checkpoints.push({
+    id: "risk",
+    target: "risk",
+    title: "风险边界",
+    detail: path?.risks[0] ?? "确认缺失、异常值、内生性和因果解释边界。",
+    badge: "需确认"
+  });
+
+  return checkpoints;
 }
 
 function missingModelSettings(settings: ModelSettings): string[] {
@@ -770,10 +843,15 @@ export default function App() {
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
   const [railWidths, setRailWidths] = useState<RailWidths>(() => loadRailWidths());
   const [resizeEdge, setResizeEdge] = useState<ResizeEdge | null>(null);
+  const [confirmedCheckpoints, setConfirmedCheckpoints] = useState<string[]>([]);
   const workspaceRef = useRef<HTMLElement | null>(null);
   const resizeSessionRef = useRef<ResizeSession | null>(null);
   const chatLogRef = useRef<HTMLDivElement | null>(null);
   const chatHistoryRef = useRef<HTMLDivElement | null>(null);
+  const questionInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const columnsInputRef = useRef<HTMLInputElement | null>(null);
+  const dependentInputRef = useRef<HTMLInputElement | null>(null);
+  const independentInputRef = useRef<HTMLInputElement | null>(null);
 
   const columns = useMemo(() => splitList(columnsInput.trim() ? columnsInput : DEFAULT_COLUMNS), [columnsInput]);
   const llmConfig = useMemo(() => toLLMConfig(modelSettings), [modelSettings]);
@@ -813,6 +891,18 @@ export default function App() {
       }),
     [dependentVariable, entityColumn, independentVariables, modelType, profile, question, recommendation, timeColumn]
   );
+  const collaborationCheckpoints = useMemo(
+    () =>
+      buildCollaborationCheckpoints({
+        profile,
+        path: researchPath,
+        question,
+        dependentVariable,
+        independentVariables,
+        recommendation,
+      }),
+    [dependentVariable, independentVariables, profile, question, recommendation, researchPath]
+  );
 
   function workspaceRailSpace() {
     const node = workspaceRef.current;
@@ -850,6 +940,10 @@ export default function App() {
     } catch {
     }
   }, [railWidths]);
+
+  useEffect(() => {
+    setConfirmedCheckpoints([]);
+  }, [dependentVariable, entityColumn, independentVariables, instrumentVariable, profile, question, recommendation?.model, runningVariable, timeColumn, treatmentColumn]);
 
   useEffect(() => {
     const fitToWindow = () => {
@@ -1028,6 +1122,44 @@ export default function App() {
     setQuestion(value);
     setRecommendationNotice(null);
     setRunNotice(null);
+  }
+
+  function toggleCheckpoint(id: string) {
+    setConfirmedCheckpoints((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  }
+
+  function focusCheckpointTarget(target: CheckpointTarget) {
+    if (target === "question") {
+      questionInputRef.current?.focus();
+      setStatus("请确认研究问题。");
+      return;
+    }
+
+    if (target === "data") {
+      if (!file) {
+        setStatus("先选择数据文件，或加载样例数据。");
+        return;
+      }
+      columnsInputRef.current?.focus();
+      setStatus(profile ? "字段画像已生成，可以继续确认数据结构。" : "点击“生成字段画像”查看数据结构。");
+      return;
+    }
+
+    if (target === "variables") {
+      const targetInput = dependentVariable.trim() ? independentInputRef.current : dependentInputRef.current;
+      targetInput?.focus();
+      setStatus("请确认变量设定。");
+      return;
+    }
+
+    if (target === "recommendation") {
+      setStatus(recommendation ? "请检查模型推荐和识别策略。" : "点击“推荐模型”生成识别策略建议。");
+      return;
+    }
+
+    setStatus("请确认风险边界，必要时回到变量配置或继续追问小计。");
   }
 
   async function loadProfile() {
@@ -1372,6 +1504,7 @@ export default function App() {
 
           <Panel title="研究问题" icon={<MessageSquare size={17} />}>
             <textarea
+              ref={questionInputRef}
               className="question-input"
               value={question}
               placeholder={QUESTION_PLACEHOLDER}
@@ -1380,6 +1513,7 @@ export default function App() {
             />
             <label>字段列表</label>
             <input
+              ref={columnsInputRef}
               className="columns-input"
               value={columnsInput}
               placeholder={COLUMNS_PLACEHOLDER}
@@ -1400,6 +1534,7 @@ export default function App() {
             </div>
             <label>被解释变量 Y</label>
             <input
+              ref={dependentInputRef}
               className="dependent-input"
               value={dependentVariable}
               placeholder={DEPENDENT_VARIABLE_PLACEHOLDER}
@@ -1407,6 +1542,7 @@ export default function App() {
             />
             <label>解释变量 X</label>
             <input
+              ref={independentInputRef}
               className="independent-input"
               value={independentVariables}
               placeholder={INDEPENDENT_VARIABLES_PLACEHOLDER}
@@ -1453,6 +1589,12 @@ export default function App() {
 
           <Panel title="研究路径" icon={<Sparkles size={17} />}>
             <ResearchPathView path={researchPath} />
+            <CollaborationCheckpoints
+              checkpoints={collaborationCheckpoints}
+              confirmedIds={confirmedCheckpoints}
+              onToggle={toggleCheckpoint}
+              onFocus={focusCheckpointTarget}
+            />
           </Panel>
 
           <Panel title="模型推荐" icon={<Cpu size={17} />}>
@@ -1987,6 +2129,60 @@ function ResearchPathView({ path }: { path: ResearchPath | null }) {
             <span key={item}>{item}</span>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CollaborationCheckpoints({
+  checkpoints,
+  confirmedIds,
+  onToggle,
+  onFocus
+}: {
+  checkpoints: CollaborationCheckpoint[];
+  confirmedIds: string[];
+  onToggle: (id: string) => void;
+  onFocus: (target: CheckpointTarget) => void;
+}) {
+  if (!checkpoints.length) return null;
+
+  const confirmedCount = checkpoints.filter((item) => confirmedIds.includes(item.id)).length;
+
+  return (
+    <div className="checkpoints">
+      <div className="checkpoints-head">
+        <div>
+          <span>协作检查点</span>
+          <strong>{confirmedCount}/{checkpoints.length} 已确认</strong>
+        </div>
+      </div>
+      <div className="checkpoint-list">
+        {checkpoints.map((checkpoint) => {
+          const checked = confirmedIds.includes(checkpoint.id);
+          return (
+            <div className={`checkpoint-item ${checked ? "checkpoint-item-done" : ""}`} key={checkpoint.id}>
+              <label className="checkpoint-check">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(checkpoint.id)}
+                  aria-label={`确认${checkpoint.title}`}
+                />
+              </label>
+              <div className="checkpoint-copy">
+                <div className="checkpoint-title-row">
+                  <strong>{checkpoint.title}</strong>
+                  <span>{checked ? "已确认" : checkpoint.badge}</span>
+                </div>
+                <p>{checkpoint.detail}</p>
+              </div>
+              <button className="checkpoint-action" type="button" onClick={() => onFocus(checkpoint.target)}>
+                去处理
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
