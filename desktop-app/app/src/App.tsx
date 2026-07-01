@@ -67,10 +67,21 @@ const MIN_LEFT_RAIL = 280;
 const MIN_MAIN_RAIL = 420;
 const MIN_RIGHT_RAIL = 320;
 const COLUMN_RESIZER_WIDTH = 12;
+const DEMO_MODEL_TYPE = "Panel Fixed Effects";
+const DEMO_ENTITY_COLUMN = "city";
+const DEMO_TIME_COLUMN = "year";
 
-type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample";
+type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample" | "demo";
+type DemoStage = "idle" | "data" | "recommend" | "run" | "report" | "ready" | "error";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
+
+const DEMO_FLOW_STEPS: Array<{ stage: DemoStage; title: string; detail: string }> = [
+  { stage: "data", title: "加载样例", detail: "城市 × 年份面板数据" },
+  { stage: "recommend", title: "推荐模型", detail: "面板固定效应路径" },
+  { stage: "run", title: "运行结果", detail: "系数、显著性和 R2" },
+  { stage: "report", title: "生成报告", detail: "Markdown 草稿" }
+];
 
 interface RailWidths {
   left: number;
@@ -636,6 +647,40 @@ function buildChatContext({
   };
 }
 
+function buildDemoRequest(sampleProfile: DataProfile): ModelRequest {
+  return {
+    research_question: DEFAULT_QUESTION,
+    columns: sampleProfile.columns.map((column) => column.name),
+    dependent_variable: DEFAULT_DEPENDENT_VARIABLE,
+    independent_variables: splitList(DEFAULT_INDEPENDENT_VARIABLES),
+    entity_column: DEMO_ENTITY_COLUMN,
+    time_column: DEMO_TIME_COLUMN,
+    treatment_column: null,
+    running_variable: null,
+    instrument_variable: null,
+    llm_config: { enabled: false }
+  };
+}
+
+function demoStageLabel(stage: DemoStage): string {
+  if (stage === "ready") return "已准备好";
+  if (stage === "error") return "需要重试";
+  if (stage === "idle") return "待开始";
+  return "准备中";
+}
+
+function demoStepState(stage: DemoStage, step: DemoStage): "pending" | "active" | "done" | "error" {
+  if (stage === "ready") return "done";
+  if (stage === "error") return "error";
+  if (stage === "idle") return "pending";
+
+  const currentIndex = DEMO_FLOW_STEPS.findIndex((item) => item.stage === stage);
+  const stepIndex = DEMO_FLOW_STEPS.findIndex((item) => item.stage === step);
+  if (stepIndex < currentIndex) return "done";
+  if (stepIndex === currentIndex) return "active";
+  return "pending";
+}
+
 function missingModelSettings(settings: ModelSettings): string[] {
   const missing: string[] = [];
   if (!settings.enabled) missing.push("启用自定义模型");
@@ -1005,6 +1050,7 @@ export default function App() {
   const [report, setReport] = useState("");
   const [status, setStatus] = useState("就绪");
   const [busy, setBusy] = useState<BusyKey | null>(null);
+  const [demoStage, setDemoStage] = useState<DemoStage>("idle");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
@@ -1034,6 +1080,7 @@ export default function App() {
     "--main-rail-min": `${MIN_MAIN_RAIL}px`,
     "--right-rail-min": `${MIN_RIGHT_RAIL}px`
   } as CSSProperties;
+  const isWorking = busy !== null;
   const filteredChatSessions = useMemo(() => {
     const keyword = chatSearch.trim().toLowerCase();
     return [...chatState.sessions]
@@ -1282,6 +1329,7 @@ export default function App() {
     const next = event.target.files?.[0] ?? null;
     setFile(next);
     setRunNotice(null);
+    setDemoStage("idle");
     setStatus(next ? `已选择 ${next.name}` : "就绪");
   }
 
@@ -1366,6 +1414,7 @@ export default function App() {
     setRunResult(null);
     setRunNotice(null);
     setReport("");
+    setDemoStage(demo ? "data" : "idle");
   }
 
   async function loadSample() {
@@ -1382,30 +1431,56 @@ export default function App() {
   }
 
   async function loadDemoScenario() {
-    setBusy("sample");
+    setBusy("demo");
+    setDemoStage("data");
     try {
       const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
       applySampleState(sampleFile, sampleProfile, true);
-      try {
-        const next = await recommendModel({
-          research_question: DEFAULT_QUESTION,
-          columns: sampleProfile.columns.map((column) => column.name),
-          dependent_variable: DEFAULT_DEPENDENT_VARIABLE,
-          independent_variables: splitList(DEFAULT_INDEPENDENT_VARIABLES),
-          entity_column: "city",
-          time_column: "year",
-          treatment_column: null,
-          running_variable: null,
-          instrument_variable: null,
-          llm_config: { enabled: false }
-        });
-        setRecommendation(next);
-        setModelType(next.model);
-        setStatus("演示场景已准备好，模型推荐已生成。");
-      } catch {
-        setStatus("演示场景已准备好，模型推荐可手动生成。");
+
+      const request = buildDemoRequest(sampleProfile);
+
+      setDemoStage("recommend");
+      setStatus("正在准备演示：生成模型推荐。");
+      const nextRecommendation = await recommendModel(request);
+      const nextModel = nextRecommendation.model || DEMO_MODEL_TYPE;
+      setRecommendation(nextRecommendation);
+      setModelType(nextModel);
+
+      setDemoStage("run");
+      setStatus("正在准备演示：运行模型。");
+      const nextRunResult = await runModel(sampleFile, request, nextModel);
+      setRunResult(nextRunResult);
+      setRunNotice(nextRunResult.success ? null : nextRunResult.error ?? "模型运行失败。");
+      if (!nextRunResult.success) {
+        throw new Error(nextRunResult.error ?? "模型运行失败。");
       }
+
+      const nextPath = buildResearchPath({
+        profile: sampleProfile,
+        question: DEFAULT_QUESTION,
+        dependentVariable: DEFAULT_DEPENDENT_VARIABLE,
+        independentVariables: DEFAULT_INDEPENDENT_VARIABLES,
+        entityColumn: DEMO_ENTITY_COLUMN,
+        timeColumn: DEMO_TIME_COLUMN,
+        modelType: nextModel,
+        recommendation: nextRecommendation,
+      });
+      const notes = buildReportNotes({
+        profile: sampleProfile,
+        path: nextPath,
+        recommendation: nextRecommendation,
+        inferenceReasoning: null
+      });
+
+      setDemoStage("report");
+      setStatus("正在准备演示：生成报告。");
+      const nextReport = await generateReport(DEFAULT_QUESTION, nextModel, nextRunResult.results, notes, { enabled: false });
+      setReport(nextReport.markdown);
+      setConfirmedCheckpoints(["question", "data", "variables", "recommendation"]);
+      setDemoStage("ready");
+      setStatus("演示已准备好：样例、推荐、结果和报告都已生成。");
     } catch (error) {
+      setDemoStage("error");
       setStatus(error instanceof Error ? error.message : "演示场景加载失败。");
     } finally {
       setBusy(null);
@@ -1713,17 +1788,18 @@ export default function App() {
                 <span>选择</span>
                 <input type="file" accept=".csv,.xlsx,.xls" onChange={onFileChange} />
               </label>
-              <button type="button" onClick={loadSample} disabled={busy === "sample"} title="加载样例数据">
+              <button type="button" onClick={loadSample} disabled={isWorking} title="加载样例数据">
                 <TableProperties size={16} />
                 <span>样例</span>
               </button>
-              <button type="button" onClick={loadDemoScenario} disabled={busy === "sample"} title="准备演示场景">
+              <button type="button" onClick={loadDemoScenario} disabled={isWorking} title="一键准备路演场景">
                 <Sparkles size={16} />
-                <span>演示</span>
+                <span>{busy === "demo" ? "准备中" : "演示"}</span>
               </button>
             </div>
             <div className="filename">{file?.name ?? "尚未选择文件"}</div>
-            <button className="wide" type="button" onClick={loadProfile} disabled={!file || busy === "profile"}>
+            <DemoFlow stage={demoStage} />
+            <button className="wide" type="button" onClick={loadProfile} disabled={!file || isWorking}>
               <RefreshCw size={16} />
               <span>生成字段画像</span>
             </button>
@@ -1750,11 +1826,11 @@ export default function App() {
 
           <Panel title="变量配置" icon={<Wand2 size={17} />} className="variables-panel">
             <div className="two-buttons">
-              <button type="button" onClick={infer} disabled={busy === "infer"}>
+              <button type="button" onClick={infer} disabled={isWorking}>
                 <Sparkles size={16} />
                 <span>识别变量</span>
               </button>
-              <button type="button" onClick={recommend} disabled={busy === "recommend"}>
+              <button type="button" onClick={recommend} disabled={isWorking}>
                 <Cpu size={16} />
                 <span>推荐模型</span>
               </button>
@@ -1786,7 +1862,7 @@ export default function App() {
 
           <Panel title="分析报告" icon={<FileText size={17} />} className="report-panel">
             <div className="report-actions">
-              <button type="button" onClick={makeReport} disabled={busy === "report"}>
+              <button type="button" onClick={makeReport} disabled={isWorking}>
                 <FileText size={16} />
                 <span>生成报告</span>
               </button>
@@ -1831,7 +1907,7 @@ export default function App() {
                   <option key={item.value} value={item.value}>{item.label}</option>
                 ))}
               </select>
-              <button type="button" onClick={run} disabled={busy === "run"}>
+              <button type="button" onClick={run} disabled={isWorking}>
                 <Play size={16} />
                 <span>运行模型</span>
               </button>
@@ -1969,6 +2045,31 @@ function ColumnResizeHandle({
       aria-orientation="vertical"
       onPointerDown={onPointerDown}
     />
+  );
+}
+
+function DemoFlow({ stage }: { stage: DemoStage }) {
+  return (
+    <div className={`demo-flow demo-flow-${stage}`}>
+      <div className="demo-flow-head">
+        <strong>路演流程</strong>
+        <span>{demoStageLabel(stage)}</span>
+      </div>
+      <div className="demo-step-list">
+        {DEMO_FLOW_STEPS.map((item) => {
+          const state = demoStepState(stage, item.stage);
+          return (
+            <div className={`demo-step demo-step-${state}`} key={item.stage}>
+              <i />
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.detail}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

@@ -585,6 +585,86 @@ body.resizing-columns * {
   white-space: nowrap;
 }
 
+.demo-flow {
+  margin: 0 0 9px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.demo-flow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.demo-flow-head strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.demo-flow-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.demo-step-list {
+  display: grid;
+  gap: 7px;
+}
+
+.demo-step {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+}
+
+.demo-step i {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: #fbfdf9;
+}
+
+.demo-step strong,
+.demo-step span {
+  display: block;
+}
+
+.demo-step strong {
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.demo-step span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.demo-step-active i {
+  border-color: var(--moss);
+  background: var(--moss);
+  box-shadow: 0 0 0 4px rgba(63, 111, 143, 0.12);
+}
+
+.demo-step-done i {
+  border-color: var(--moss);
+  background: var(--moss);
+}
+
+.demo-step-error i {
+  border-color: var(--rust);
+  background: var(--rust);
+}
+
 .wide {
   width: 100%;
 }
