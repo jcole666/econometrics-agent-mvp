@@ -70,13 +70,13 @@ const MIN_MAIN_RAIL = 420;
 const MIN_RIGHT_RAIL = 320;
 const COLUMN_RESIZER_WIDTH = 12;
 const DEFAULT_PANEL_HEIGHTS = {
-  left: { data: 540, question: 220, variables: 420, report: 310 },
-  main: { profile: 300, path: 360, recommendation: 280, result: 280 },
+  left: { data: 540, variables: 420, report: 310 },
+  main: { question: 220, profile: 300, path: 360, recommendation: 280, result: 280 },
   right: { chat: 660 }
 };
 const DEMO_PANEL_HEIGHTS = {
-  left: { data: 640, question: 210, variables: 330, report: 360 },
-  main: { profile: 300, path: 430, recommendation: 280, result: 330 },
+  left: { data: 640, variables: 330, report: 360 },
+  main: { question: 210, profile: 300, path: 430, recommendation: 280, result: 330 },
   right: { chat: 760 }
 };
 const PANEL_MIN_HEIGHTS = {
@@ -2218,31 +2218,6 @@ export default function App() {
             onDoubleClick={() => resetPanelRail("left")}
           />
 
-          <Panel title="研究问题" icon={<MessageSquare size={17} />} style={panelStyle("left", "question")}>
-            <textarea
-              ref={questionInputRef}
-              className="question-input"
-              value={question}
-              placeholder={QUESTION_PLACEHOLDER}
-              onChange={(event) => updateQuestion(event.target.value)}
-              rows={4}
-            />
-            <label>字段列表</label>
-            <input
-              ref={columnsInputRef}
-              className="columns-input"
-              value={columnsInput}
-              placeholder={COLUMNS_PLACEHOLDER}
-              onChange={(event) => setColumnsInput(event.target.value)}
-            />
-          </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "left:question"}
-            label="调整研究问题板块高度"
-            onPointerDown={(event) => startPanelResize("left", "question", event)}
-            onDoubleClick={() => resetPanelRail("left")}
-          />
-
           <Panel title="变量配置" icon={<Wand2 size={17} />} className="variables-panel" style={panelStyle("left", "variables")}>
             <div className="two-buttons">
               <button type="button" onClick={infer} disabled={isWorking}>
@@ -2294,6 +2269,31 @@ export default function App() {
         />
 
         <section className="rail rail-main">
+          <Panel title="研究问题" icon={<MessageSquare size={17} />} style={panelStyle("main", "question")}>
+            <textarea
+              ref={questionInputRef}
+              className="question-input"
+              value={question}
+              placeholder={QUESTION_PLACEHOLDER}
+              onChange={(event) => updateQuestion(event.target.value)}
+              rows={4}
+            />
+            <label>字段列表</label>
+            <input
+              ref={columnsInputRef}
+              className="columns-input"
+              value={columnsInput}
+              placeholder={COLUMNS_PLACEHOLDER}
+              onChange={(event) => setColumnsInput(event.target.value)}
+            />
+          </Panel>
+          <PanelResizeHandle
+            active={panelResizeKey === "main:question"}
+            label="调整研究问题板块高度"
+            onPointerDown={(event) => startPanelResize("main", "question", event)}
+            onDoubleClick={() => resetPanelRail("main")}
+          />
+
           <Panel title="模型推荐" icon={<Cpu size={17} />} style={panelStyle("main", "recommendation")}>
             <div className="runbar">
               <select value={modelType} onChange={(event) => setModelType(event.target.value)}>

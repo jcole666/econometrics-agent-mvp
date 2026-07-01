@@ -1863,18 +1863,24 @@ body.resizing-panels * {
 .report {
   max-height: 260px;
   border-radius: 6px;
-  border: 1px solid #2b3439;
-  background: var(--code);
-  color: #ecf0e8;
   padding: 10px;
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
 }
 
+.code {
+  border: 1px solid #2b3439;
+  background: var(--code);
+  color: #ecf0e8;
+}
+
 .report {
   min-height: 320px;
   margin-top: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .report-panel .report {
@@ -1884,7 +1890,7 @@ body.resizing-panels * {
 
 .report-actions {
   display: grid;
-  grid-template-columns: 1fr 92px 100px;
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 8px;
 }
 
