@@ -2069,6 +2069,7 @@ export default function App() {
               </button>
             </div>
             <div className="filename">{file?.name ?? "尚未选择文件"}</div>
+            <DataQualityBrief profile={profile} onAsk={prepareReviewQuestion} />
             <DemoFlow stage={demoStage} />
             <DemoBrief
               profile={profile}
@@ -2722,6 +2723,114 @@ function Input({ label, value, onChange }: { label: string; value: string; onCha
       <span>{label}</span>
       <input value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
+  );
+}
+
+function dataQualityRisks(profile: DataProfile): string[] {
+  const diagnostics = profile.diagnostics;
+  if (!diagnostics) return [];
+
+  const risks: string[] = [];
+  if (diagnostics.duplicate_rows > 0) {
+    risks.push(`重复行 ${diagnostics.duplicate_rows} 行，建模前需要确认是否重复采样。`);
+  }
+  diagnostics.high_missing_columns.slice(0, 2).forEach((item) => {
+    risks.push(`${item.name} 缺失率 ${formatPercent(item.missing_rate)}，可能影响样本保留。`);
+  });
+  diagnostics.constant_columns.slice(0, 2).forEach((name) => {
+    risks.push(`${name} 近似常量，进入回归前要确认是否有解释价值。`);
+  });
+  diagnostics.outlier_columns.slice(0, 2).forEach((item) => {
+    risks.push(`${item.name} 有 ${item.outliers} 个 IQR 异常值，建议先看分布或做稳健处理。`);
+  });
+  diagnostics.modeling_warnings.slice(0, 3).forEach((item) => {
+    risks.push(`${item.name}：${item.reason}`);
+  });
+
+  return Array.from(new Set(risks)).slice(0, 4);
+}
+
+function DataQualityBrief({
+  profile,
+  onAsk
+}: {
+  profile: DataProfile | null;
+  onAsk: (question: string) => void;
+}) {
+  if (!profile) return null;
+
+  const diagnostics = profile.diagnostics;
+  const riskItems = dataQualityRisks(profile);
+  const askText = "这份数据目前最值得优先处理的质量风险是什么？请按缺失、重复、异常值、变量关系和建模影响分点说明。";
+
+  if (!diagnostics) {
+    return (
+      <div className="quality-brief">
+        <div className="quality-head">
+          <span>数据体检</span>
+          <strong>基础</strong>
+        </div>
+        <div className="quality-metrics">
+          <div>
+            <strong>{profile.rows}</strong>
+            <span>样本量</span>
+          </div>
+          <div>
+            <strong>{profile.columns_count}</strong>
+            <span>字段数</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const panel = diagnostics.panel_hint;
+  const riskCount = (
+    (diagnostics.duplicate_rows > 0 ? 1 : 0) +
+    diagnostics.high_missing_columns.length +
+    diagnostics.constant_columns.length +
+    diagnostics.outlier_columns.length +
+    diagnostics.modeling_warnings.length
+  );
+
+  return (
+    <div className="quality-brief">
+      <div className="quality-head">
+        <span>数据体检</span>
+        <button className="quality-ask" type="button" onClick={() => onAsk(askText)}>
+          追问风险
+        </button>
+      </div>
+      <div className="quality-metrics">
+        <div>
+          <strong>{formatPercent(diagnostics.missing_rate)}</strong>
+          <span>缺失率</span>
+        </div>
+        <div>
+          <strong>{diagnostics.duplicate_rows}</strong>
+          <span>重复行</span>
+        </div>
+        <div>
+          <strong>{riskCount}</strong>
+          <span>风险项</span>
+        </div>
+        <div>
+          <strong>{diagnostics.relationship_hints.length}</strong>
+          <span>关系线索</span>
+        </div>
+      </div>
+      {panel ? (
+        <div className="quality-panel-line">
+          <strong>{panel.entity_column} × {panel.time_column}</strong>
+          <span>{panel.units} 个个体，{panel.periods} 期，{panel.is_balanced ? "平衡面板" : `缺 ${panel.missing_cells} 格`}</span>
+        </div>
+      ) : null}
+      <ul className="quality-risk-list">
+        {(riskItems.length ? riskItems : ["暂未发现明显质量风险。"]).map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
