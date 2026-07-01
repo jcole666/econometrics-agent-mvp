@@ -1398,6 +1398,108 @@ body.resizing-panels * {
   font-weight: 700;
 }
 
+.defense-cards {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 10px;
+}
+
+.defense-cards summary {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(212, 221, 226, 0.9);
+  border-radius: 6px;
+  background: #fbfdf9;
+  color: var(--ink);
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.defense-cards summary::-webkit-details-marker {
+  display: none;
+}
+
+.defense-cards summary span {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.defense-cards summary strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.defense-cards[open] summary {
+  border-color: rgba(63, 111, 143, 0.34);
+  background: #eef4f8;
+}
+
+.defense-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.defense-card {
+  min-width: 0;
+  border: 1px solid rgba(212, 221, 226, 0.9);
+  border-radius: 6px;
+  background: #fff;
+  padding: 10px;
+}
+
+.defense-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.defense-card-head span {
+  color: var(--moss-dark);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.defense-card-head button {
+  min-height: 26px;
+  border-color: var(--line);
+  background: #fbfdf9;
+  color: var(--moss-dark);
+  box-shadow: none;
+  padding: 3px 7px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.defense-card-head button:hover:not(:disabled) {
+  border-color: rgba(63, 111, 143, 0.48);
+  background: #eef4f8;
+}
+
+.defense-card > strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.defense-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .checkpoints {
   display: flex;
   flex-direction: column;

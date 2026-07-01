@@ -203,6 +203,13 @@ interface DemoScriptSection {
   text: string;
 }
 
+interface DefenseCard {
+  title: string;
+  question: string;
+  answer: string;
+  prompt: string;
+}
+
 const MODEL_OPTIONS = [
   { value: "OLS", label: "OLS 线性回归" },
   { value: "Logit", label: "Logit 二元选择" },
@@ -495,6 +502,52 @@ function buildDemoScript({
       time: "2:35",
       title: "收尾",
       text: `所以这个 Demo 展示的是“人机协作做计量分析”：小计负责整理路径、暴露风险、生成草稿，研究者负责判断假设。下一步会继续做：${nextStepText}。当前需要特别说明：${riskText}`
+    }
+  ];
+}
+
+function buildDefenseCards({
+  profile,
+  path,
+  recommendation,
+  runResult
+}: {
+  profile: DataProfile | null;
+  path: ResearchPath | null;
+  recommendation: ModelRecommendation | null;
+  runResult: RunModelResponse | null;
+}): DefenseCard[] {
+  const model = recommendation?.model ?? path?.model ?? DEMO_MODEL_TYPE;
+  const mainResult = demoResultText(runResult);
+  const risks = profile ? dataQualityRisks(profile) : [];
+  const dataRisk = risks[0] ?? "当前没有看到特别突出的数据质量风险，但正式展示前仍要说明缺失、异常值和样本覆盖。";
+  const boundary = path?.risks[0] ?? resultBoundary(model);
+  const nextStep = path?.nextSteps.slice(0, 2).join("；") || "补充稳健性检验和替代设定";
+
+  return [
+    {
+      title: "因果边界",
+      question: "老师问：这个结果能不能直接解释为因果？",
+      answer: `${boundary} 现场可以先承认边界，再说明下一步会做：${nextStep}。`,
+      prompt: "请帮我把当前结果的因果边界整理成一段答辩口径，要求诚实但不显得项目很弱。"
+    },
+    {
+      title: "数据质量",
+      question: "老师问：这个数据有没有质量问题？",
+      answer: dataRisk,
+      prompt: "请基于当前字段画像，帮我列出最该优先解释的数据质量风险，以及它们对模型结论的影响。"
+    },
+    {
+      title: "人机协作",
+      question: "老师问：为什么不是全自动跑完就行？",
+      answer: "小计把字段画像、关系线索、模型路径、检查点和报告草稿串起来；研究者仍要确认变量、识别假设和结论边界。",
+      prompt: "请帮我解释小计为什么是人机协作工具，而不是全自动替代研究者的流水线。"
+    },
+    {
+      title: "Demo 价值",
+      question: "老师问：这和普通 LLM 写一段 OLS 有什么区别？",
+      answer: `当前演示不是单点写代码，而是从数据结构到 ${modelLabel(model)}、再到结果解释串成流程。${mainResult}`,
+      prompt: "请帮我对比小计和普通 LLM 直接写 OLS 的区别，重点放在数据画像、路径推理、检查点和结果边界。"
     }
   ];
 }
@@ -2371,6 +2424,13 @@ export default function App() {
                   onToggle={toggleCheckpoint}
                   onFocus={focusCheckpointTarget}
                 />
+                <DefenseCardsView
+                  profile={profile}
+                  path={researchPath}
+                  recommendation={recommendation}
+                  runResult={runResult}
+                  onAsk={prepareReviewQuestion}
+                />
               </Panel>
             ) : null}
 
@@ -2589,6 +2649,47 @@ function DemoScript({
         ))}
       </div>
     </div>
+  );
+}
+
+function DefenseCardsView({
+  profile,
+  path,
+  recommendation,
+  runResult,
+  onAsk
+}: {
+  profile: DataProfile | null;
+  path: ResearchPath | null;
+  recommendation: ModelRecommendation | null;
+  runResult: RunModelResponse | null;
+  onAsk: (question: string) => void;
+}) {
+  if (!profile && !path) return null;
+
+  const cards = buildDefenseCards({ profile, path, recommendation, runResult });
+
+  return (
+    <details className="defense-cards">
+      <summary>
+        <span>现场答辩卡</span>
+        <strong>{cards.length} 个常见问题</strong>
+      </summary>
+      <div className="defense-card-list">
+        {cards.map((card) => (
+          <article className="defense-card" key={card.title}>
+            <div className="defense-card-head">
+              <span>{card.title}</span>
+              <button type="button" onClick={() => onAsk(card.prompt)}>
+                放入问答
+              </button>
+            </div>
+            <strong>{card.question}</strong>
+            <p>{card.answer}</p>
+          </article>
+        ))}
+      </div>
+    </details>
   );
 }
 
