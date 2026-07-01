@@ -655,6 +655,10 @@ body.resizing-panels * {
   font-weight: 850;
 }
 
+.rail-left .panel:first-child .panel-title h2 {
+  font-size: 15px;
+}
+
 .file-row,
 .two-buttons,
 .runbar,
@@ -690,7 +694,12 @@ body.resizing-panels * {
   color: var(--ink);
   padding: 7px 11px;
   cursor: pointer;
+  font-size: 15px;
   margin: 0;
+}
+
+.file-row button {
+  font-size: 15px;
 }
 
 .file-button:hover {
@@ -707,6 +716,7 @@ body.resizing-panels * {
   display: flex;
   align-items: center;
   color: var(--muted);
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -949,12 +959,12 @@ body.resizing-panels * {
 
 .demo-flow-head strong {
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .demo-flow-head span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -986,13 +996,13 @@ body.resizing-panels * {
 
 .demo-step strong {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.3;
 }
 
 .demo-step span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.35;
 }
 
