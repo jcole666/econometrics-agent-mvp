@@ -317,6 +317,43 @@ function resultBoundary(model: string | undefined): string {
   return "当前结果适合作为第一版判断，正式写作前还需要补充稳健性和诊断检查。";
 }
 
+function isDemoProfile(profile: DataProfile | null): boolean {
+  if (!profile) return false;
+  const names = new Set(profile.columns.map((column) => column.name));
+  return names.has("innovation_index") && names.has("digital_economy_index") && names.has("city") && names.has("year");
+}
+
+function primaryRelationship(profile: DataProfile | null): RelationshipHint | null {
+  const hints = profile?.diagnostics?.relationship_hints ?? [];
+  return (
+    hints.find((item) => (
+      [item.left, item.right].includes("innovation_index") &&
+      [item.left, item.right].includes("digital_economy_index")
+    )) ??
+    hints[0] ??
+    null
+  );
+}
+
+function demoFindingText(profile: DataProfile | null): string {
+  const hint = primaryRelationship(profile);
+  if (!hint) return "先从字段画像和关系线索里找值得追问的变量关系。";
+  return `${hint.left} 与 ${hint.right} 呈${hint.direction}，${hint.method}=${hint.score.toFixed(3)}，适合作为演示里的第一条发现。`;
+}
+
+function demoResultText(result: RunModelResponse | null): string {
+  if (!result?.success || !result.results) {
+    return "运行模型后，这里会自动提炼核心系数和显著性。";
+  }
+
+  const primary = mainCoefficient(result.results.coefficients);
+  if (!primary || !hasNumber(primary.coefficient)) {
+    return `模型已运行，有效样本量 ${result.results.sample_size}。`;
+  }
+
+  return `${primary.variable} 为${coefficientDirection(primary.coefficient)}，系数 ${formatNumber(primary.coefficient)}，${significanceText(primary.p_value)}。`;
+}
+
 function firstExistingColumn(profile: DataProfile, names: string[]): string | null {
   const available = new Set(profile.columns.map((column) => column.name));
   return names.find((name) => available.has(name)) ?? null;
@@ -1799,6 +1836,13 @@ export default function App() {
             </div>
             <div className="filename">{file?.name ?? "尚未选择文件"}</div>
             <DemoFlow stage={demoStage} />
+            <DemoBrief
+              profile={profile}
+              path={researchPath}
+              recommendation={recommendation}
+              runResult={runResult}
+              stage={demoStage}
+            />
             <button className="wide" type="button" onClick={loadProfile} disabled={!file || isWorking}>
               <RefreshCw size={16} />
               <span>生成字段画像</span>
@@ -2068,6 +2112,54 @@ function DemoFlow({ stage }: { stage: DemoStage }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function DemoBrief({
+  profile,
+  path,
+  recommendation,
+  runResult,
+  stage
+}: {
+  profile: DataProfile | null;
+  path: ResearchPath | null;
+  recommendation: ModelRecommendation | null;
+  runResult: RunModelResponse | null;
+  stage: DemoStage;
+}) {
+  if (stage === "idle" && !isDemoProfile(profile)) return null;
+
+  const model = recommendation?.model ?? path?.model ?? DEMO_MODEL_TYPE;
+  const structure = path?.structure ?? "城市 × 年份面板样例，用来演示从数据画像到模型结果的完整路径。";
+  const resultText = demoResultText(runResult);
+
+  return (
+    <div className="demo-brief">
+      <div className="demo-brief-head">
+        <span>演示讲解卡</span>
+        <strong>{stage === "ready" ? "可直接讲" : "准备中"}</strong>
+      </div>
+      <p className="demo-brief-lead">这不是让小计替研究者下结论，而是让它把“发现问题、选择路径、解释边界”串起来。</p>
+      <div className="demo-brief-list">
+        <div>
+          <span>1</span>
+          <p>{structure}</p>
+        </div>
+        <div>
+          <span>2</span>
+          <p>{demoFindingText(profile)}</p>
+        </div>
+        <div>
+          <span>3</span>
+          <p>推荐使用 {modelLabel(model)}，先控制城市和年份层面的固定差异。</p>
+        </div>
+        <div>
+          <span>4</span>
+          <p>{resultText}</p>
+        </div>
       </div>
     </div>
   );
