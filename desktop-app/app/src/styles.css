@@ -670,7 +670,7 @@ body.resizing-panels * {
 }
 
 .file-row {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .send-row {
@@ -1893,6 +1893,64 @@ body.resizing-panels * {
 .report-actions button {
   min-width: 0;
   padding: 7px 8px;
+}
+
+.guide-panel {
+  overflow: auto;
+}
+
+.guide-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.guide-lead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-3);
+  padding: 12px;
+}
+
+.guide-lead strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.guide-lead span {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.guide-section {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.guide-section h3 {
+  margin: 0 0 7px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.guide-section p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .question-input:focus::placeholder,

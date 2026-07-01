@@ -1,5 +1,6 @@
 import {
   Activity,
+  BookOpen,
   ChevronDown,
   Cpu,
   Database,
@@ -94,17 +95,17 @@ const DEMO_MODEL_TYPE = "Panel Fixed Effects";
 const DEMO_ENTITY_COLUMN = "city";
 const DEMO_TIME_COLUMN = "year";
 
-type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample" | "demo";
+type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "demo";
 type DemoStage = "idle" | "data" | "recommend" | "run" | "report" | "ready" | "error";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
-type WorkbenchView = "workflow" | "profile" | "path" | "report";
+type WorkbenchView = "workflow" | "profile" | "path" | "report" | "guide";
 type RailId = keyof typeof DEFAULT_PANEL_HEIGHTS;
 type PanelId = keyof typeof PANEL_MIN_HEIGHTS;
 type PanelHeights = Record<RailId, Partial<Record<PanelId, number>>>;
 
 const DEMO_FLOW_STEPS: Array<{ stage: DemoStage; title: string; detail: string }> = [
-  { stage: "data", title: "加载样例", detail: "城市 × 年份面板数据" },
+  { stage: "data", title: "加载演示数据", detail: "城市 × 年份面板数据" },
   { stage: "recommend", title: "推荐模型", detail: "面板固定效应路径" },
   { stage: "run", title: "运行结果", detail: "系数、显著性和 R2" },
   { stage: "report", title: "生成报告", detail: "Markdown 草稿" }
@@ -124,7 +125,7 @@ const DEMO_REVIEW_QUESTIONS = [
   },
   {
     label: "现场回应",
-    question: "如果老师质疑样例数据规模不大，我应该怎么回应这个 Demo 的价值？"
+    question: "如果老师质疑演示数据规模不大，我应该怎么回应这个 Demo 的价值？"
   }
 ];
 
@@ -465,7 +466,7 @@ function buildDemoScript({
 }): DemoScriptSection[] {
   const questionText = path?.question ?? DEFAULT_QUESTION;
   const model = recommendation?.model ?? path?.model ?? DEMO_MODEL_TYPE;
-  const dataText = buildDataSummary(profile) ?? "先加载样例数据，再展示字段画像、缺失情况和变量关系线索";
+  const dataText = buildDataSummary(profile) ?? "先加载演示数据，再展示字段画像、缺失情况和变量关系线索";
   const findingText = demoFindingText(profile);
   const resultText = demoResultText(runResult);
   const r2Text = hasNumber(runResult?.results?.r_squared) ? `R2=${formatNumber(runResult?.results?.r_squared)}。` : "";
@@ -481,7 +482,7 @@ function buildDemoScript({
     {
       time: "0:25",
       title: "数据",
-      text: `软件先读取数据并生成字段画像。当前样例是：${dataText}。这一步不是直接跑回归，而是先让研究者看清数据结构。`
+      text: `软件先读取数据并生成字段画像。当前演示数据是：${dataText}。这一步不是直接跑回归，而是先让研究者看清数据结构。`
     },
     {
       time: "0:55",
@@ -1400,6 +1401,7 @@ export default function App() {
     if (view === "profile") setStatus(profile ? "正在查看字段画像。" : "先选择数据并生成字段画像。");
     if (view === "path") setStatus(researchPath ? "正在查看研究路径。" : "先生成字段画像和变量配置。");
     if (view === "report") setStatus(report.trim() ? "正在查看分析报告。" : "可以在这里生成分析报告。");
+    if (view === "guide") setStatus("正在查看使用文档。");
   }
 
   function startPanelResize(rail: RailId, panelId: PanelId, event: ReactPointerEvent<HTMLDivElement>) {
@@ -1424,7 +1426,7 @@ export default function App() {
     setStatus("已恢复当前列的板块高度。");
   }
 
-  function applyDemoLayout() {
+  function resetWorkspaceLayout() {
     setActiveView("workflow");
     setRailWidths(fitRailWidths(DEMO_RAIL_WIDTHS, workspaceRailSpace()));
     setPanelHeights({
@@ -1432,7 +1434,7 @@ export default function App() {
       main: { ...DEMO_PANEL_HEIGHTS.main },
       right: { ...DEMO_PANEL_HEIGHTS.right }
     });
-    setStatus("已切换到演示布局。");
+    setStatus("已恢复推荐布局。");
   }
 
   useEffect(() => {
@@ -1683,7 +1685,7 @@ export default function App() {
     if (target === "data") {
       setActiveView("workflow");
       if (!file) {
-        setStatus("先选择数据文件，或加载样例数据。");
+        setStatus("先选择数据文件，或点击演示准备内置数据。");
         return;
       }
       window.setTimeout(() => columnsInputRef.current?.focus(), 0);
@@ -1730,39 +1732,26 @@ export default function App() {
     }
   }
 
-  function applySampleState(sampleFile: File, sampleProfile: DataProfile, demo: boolean) {
+  function applyDemoState(sampleFile: File, sampleProfile: DataProfile) {
     setFile(sampleFile);
     setProfile(sampleProfile);
-    setQuestion(demo ? DEFAULT_QUESTION : "");
+    setQuestion(DEFAULT_QUESTION);
     setColumnsInput(sampleProfile.columns.map((column) => column.name).join(", "));
-    setDependentVariable(demo ? DEFAULT_DEPENDENT_VARIABLE : "");
-    setIndependentVariables(demo ? DEFAULT_INDEPENDENT_VARIABLES : "");
-    setEntityColumn(demo ? "city" : "");
-    setTimeColumn(demo ? "year" : "");
+    setDependentVariable(DEFAULT_DEPENDENT_VARIABLE);
+    setIndependentVariables(DEFAULT_INDEPENDENT_VARIABLES);
+    setEntityColumn("city");
+    setTimeColumn("year");
     setTreatmentColumn("");
     setRunningVariable("");
     setInstrumentVariable("");
-    setModelType(demo ? "Panel Fixed Effects" : "OLS");
+    setModelType("Panel Fixed Effects");
     setInference(null);
     setRecommendation(null);
     setRecommendationNotice(null);
     setRunResult(null);
     setRunNotice(null);
     setReport("");
-    setDemoStage(demo ? "data" : "idle");
-  }
-
-  async function loadSample() {
-    setBusy("sample");
-    try {
-      const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
-      applySampleState(sampleFile, sampleProfile, false);
-      setStatus("样例数据已加载。");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "样例数据加载失败。");
-    } finally {
-      setBusy(null);
-    }
+    setDemoStage("data");
   }
 
   async function loadDemoScenario() {
@@ -1771,7 +1760,7 @@ export default function App() {
     setDemoStage("data");
     try {
       const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
-      applySampleState(sampleFile, sampleProfile, true);
+      applyDemoState(sampleFile, sampleProfile);
 
       const request = buildDemoRequest(sampleProfile);
 
@@ -1814,7 +1803,7 @@ export default function App() {
       setReport(nextReport.markdown);
       setConfirmedCheckpoints(["question", "data", "variables", "recommendation"]);
       setDemoStage("ready");
-      setStatus("演示已准备好：样例、推荐、结果和报告都已生成。");
+      setStatus("演示已准备好：数据、推荐、结果和报告都已生成。");
     } catch (error) {
       setDemoStage("error");
       setStatus(error instanceof Error ? error.message : "演示场景加载失败。");
@@ -1868,7 +1857,7 @@ export default function App() {
 
   async function run() {
     if (!file) {
-      const message = "请先加载样例数据或选择一个数据文件，模型结果需要真实数据才能计算。";
+      const message = "请先选择数据文件，或点击演示准备内置数据。";
       setRunNotice(message);
       setStatus(message);
       return;
@@ -2125,6 +2114,14 @@ export default function App() {
               <FileText size={15} />
               <span>分析报告</span>
             </button>
+            <button
+              className={`view-switch-button ${activeView === "guide" ? "active" : ""}`}
+              type="button"
+              onClick={() => showView("guide")}
+            >
+              <BookOpen size={15} />
+              <span>使用文档</span>
+            </button>
           </nav>
         </div>
         <div className="topbar-actions">
@@ -2139,11 +2136,11 @@ export default function App() {
           <button
             className="topbar-tool-button"
             type="button"
-            onClick={applyDemoLayout}
-            title="切换到适合路演的布局"
+            onClick={resetWorkspaceLayout}
+            title="恢复推荐工作台布局"
           >
             <RotateCcw size={16} />
-            <span>演示布局</span>
+            <span>重置布局</span>
           </button>
           <button
             className={`icon-button settings-button ${modelSettings.enabled ? "settings-active" : ""}`}
@@ -2178,10 +2175,6 @@ export default function App() {
                 <span>选择</span>
                 <input type="file" accept=".csv,.xlsx,.xls" onChange={onFileChange} />
               </label>
-              <button type="button" onClick={loadSample} disabled={isWorking} title="加载样例数据">
-                <TableProperties size={16} />
-                <span>样例</span>
-              </button>
               <button type="button" onClick={loadDemoScenario} disabled={isWorking} title="一键准备路演场景">
                 <Sparkles size={16} />
                 <span>{busy === "demo" ? "准备中" : "演示"}</span>
@@ -2465,6 +2458,12 @@ export default function App() {
                 <pre className="report">{report || "尚未生成报告。"}</pre>
               </Panel>
             ) : null}
+
+            {activeView === "guide" ? (
+              <Panel title="使用文档" icon={<BookOpen size={17} />} className="guide-panel focus-panel">
+                <UserGuideView />
+              </Panel>
+            ) : null}
           </div>
         )}
       </section>
@@ -2494,6 +2493,68 @@ function Panel({
       </div>
       {children}
     </section>
+  );
+}
+
+function UserGuideView() {
+  const sections = [
+    {
+      title: "1. 打开和确认状态",
+      text: "双击项目根目录的 小计.exe。启动后看顶部状态条：显示“后端服务在线”时，本地分析服务已经准备好。顶部的“工作台、字段画像、研究路径、分析报告、使用文档”用于切换主要页面。"
+    },
+    {
+      title: "2. 选择数据或使用演示",
+      text: "自己的数据点击左侧“选择”，支持 CSV、xlsx、xls。路演或课堂展示点击“演示”，它会加载城市面板演示数据，并自动准备研究问题、变量、模型推荐、运行结果和报告草稿。"
+    },
+    {
+      title: "3. 生成字段画像",
+      text: "选择文件后点击“生成字段画像”。小计会读取字段类型、缺失值、唯一值、样例值、重复行、可能的个体列和时间列，还会把明显的数据质量风险提前列出来。字段画像只提供线索，不直接替代研究判断。"
+    },
+    {
+      title: "4. 填写研究问题和变量",
+      text: "中间栏顶部填写研究问题，例如“数字经济发展是否会提升城市创新水平？”。左侧变量配置里填写被解释变量 Y、解释变量 X，以及个体列、时间列、处理列、断点变量或工具变量。多个 X 用英文逗号分隔。"
+    },
+    {
+      title: "5. 推荐并运行模型",
+      text: "点击“推荐模型”后，小计会根据研究问题、字段和变量配置给出模型建议。确认后点击“运行模型”。当前 OLS、Logit、面板固定效应支持直接运行；DID、RDD、IV-2SLS 会先给识别路径、检查清单和代码模板。"
+    },
+    {
+      title: "6. 查看研究路径",
+      text: "点顶部“研究路径”，可以看到候选研究问题、变量设定、识别思路、假设边界和协作检查点。候选问题可以直接采用，也可以放入右侧问答继续追问。答辩卡适合准备老师可能会问的因果边界、数据质量和 Demo 价值问题。"
+    },
+    {
+      title: "7. 使用小计问答",
+      text: "右侧问答会读取当前字段画像、研究问题、变量配置、模型推荐、模型结果和报告草稿。建议先生成字段画像和模型推荐，再问“为什么推荐这个模型”“系数怎么解释”“下一步要检查什么”。右侧可以新建会话，也可以搜索历史会话。"
+    },
+    {
+      title: "8. 生成和导出报告",
+      text: "点顶部“分析报告”，再点“生成报告”。报告会汇总研究问题、模型选择、核心结果、数据风险和下一步建议。可以导出 MD 继续编辑，也可以导出 PDF 用于提交或发送。"
+    },
+    {
+      title: "9. 配置模型",
+      text: "右上角齿轮用于配置大模型。需要填请求地址、模型名称和 API Key。配置保存在本机，不写进代码。未配置时，小计会提示先补全模型设置。"
+    },
+    {
+      title: "10. 常见问题",
+      text: "后端离线时先关闭软件再重新打开；端口被占用时关闭其他小计窗口；Excel 读取失败时确认文件没有被 Excel 占用且表头在第一行；模型运行失败时优先检查变量名、数值类型、缺失值和样本量。"
+    }
+  ];
+
+  return (
+    <div className="guide-body">
+      <div className="guide-lead">
+        <strong>从数据到报告的完整流程</strong>
+        <span>按下面顺序走一遍，就能完成一次课堂演示或论文建模草稿。</span>
+      </div>
+      <div className="guide-grid">
+        {sections.map((section) => (
+          <section className="guide-section" key={section.title}>
+            <h3>{section.title}</h3>
+            <p>{section.text}</p>
+          </section>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2590,11 +2651,11 @@ function DemoScenarioBrief({
   return (
     <details className="scenario-brief">
       <summary>
-        <span>样例场景</span>
+        <span>演示场景</span>
         <strong>城市面板</strong>
       </summary>
       <p>
-        这个样例把多个城市跨年份数据放在一起，问题不是单纯写一段 OLS，而是先识别城市 × 年份结构，再讨论固定效应、控制变量和因果边界。
+        这份演示数据把多个城市跨年份数据放在一起，问题不是单纯写一段 OLS，而是先识别城市 × 年份结构，再讨论固定效应、控制变量和因果边界。
       </p>
       <div className="scenario-grid">
         <div>
@@ -2621,7 +2682,7 @@ function DemoScenarioBrief({
       <button
         className="scenario-ask"
         type="button"
-        onClick={() => onAsk("请帮我用答辩口吻解释这个城市面板样例为什么比普通 OLS 演示更有说服力。")}
+        onClick={() => onAsk("请帮我用答辩口吻解释这个城市面板演示为什么比普通 OLS 演示更有说服力。")}
       >
         追问场景价值
       </button>
@@ -2647,7 +2708,7 @@ function DemoBrief({
   if (stage === "idle" && !isDemoProfile(profile)) return null;
 
   const model = recommendation?.model ?? path?.model ?? DEMO_MODEL_TYPE;
-  const structure = path?.structure ?? "城市 × 年份面板样例，用来演示从数据画像到模型结果的完整路径。";
+  const structure = path?.structure ?? "城市 × 年份面板演示数据，用来展示从数据画像到模型结果的完整路径。";
   const resultText = demoResultText(runResult);
 
   return (
