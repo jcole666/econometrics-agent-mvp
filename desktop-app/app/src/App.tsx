@@ -64,6 +64,7 @@ const LAYOUT_WIDTHS_KEY = "econometrics-agent.layout-widths";
 const PANEL_HEIGHTS_KEY = "econometrics-agent.panel-heights";
 
 const DEFAULT_RAIL_WIDTHS = { left: 330, right: 360 };
+const DEMO_RAIL_WIDTHS = { left: 370, right: 420 };
 const MIN_LEFT_RAIL = 280;
 const MIN_MAIN_RAIL = 420;
 const MIN_RIGHT_RAIL = 320;
@@ -72,6 +73,11 @@ const DEFAULT_PANEL_HEIGHTS = {
   left: { data: 430, question: 220, variables: 420, report: 310 },
   main: { profile: 300, path: 360, recommendation: 280, result: 280 },
   right: { chat: 660 }
+};
+const DEMO_PANEL_HEIGHTS = {
+  left: { data: 500, question: 210, variables: 330, report: 360 },
+  main: { profile: 300, path: 430, recommendation: 280, result: 330 },
+  right: { chat: 760 }
 };
 const PANEL_MIN_HEIGHTS = {
   data: 300,
@@ -1298,6 +1304,16 @@ export default function App() {
     setStatus("已恢复当前列的板块高度。");
   }
 
+  function applyDemoLayout() {
+    setRailWidths(fitRailWidths(DEMO_RAIL_WIDTHS, workspaceRailSpace()));
+    setPanelHeights({
+      left: { ...DEMO_PANEL_HEIGHTS.left },
+      main: { ...DEMO_PANEL_HEIGHTS.main },
+      right: { ...DEMO_PANEL_HEIGHTS.right }
+    });
+    setStatus("已切换到演示布局。");
+  }
+
   useEffect(() => {
     getHealth()
       .then(() => setHealth("online"))
@@ -1964,6 +1980,15 @@ export default function App() {
             </span>
             <span className="status-text">{status}</span>
           </div>
+          <button
+            className="topbar-tool-button"
+            type="button"
+            onClick={applyDemoLayout}
+            title="切换到适合路演的布局"
+          >
+            <RotateCcw size={16} />
+            <span>演示布局</span>
+          </button>
           <button
             className={`icon-button settings-button ${modelSettings.enabled ? "settings-active" : ""}`}
             type="button"

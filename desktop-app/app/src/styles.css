@@ -220,6 +220,24 @@ pre {
   background: #eef4f8;
 }
 
+.topbar-tool-button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  border-color: var(--line);
+  background: #fbfdf9;
+  color: var(--moss-dark);
+  box-shadow: none;
+  padding: 6px 9px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.topbar-tool-button:hover:not(:disabled) {
+  border-color: var(--moss);
+  background: #eef4f8;
+  color: var(--moss-dark);
+}
+
 .settings-button {
   flex: 0 0 34px;
   border-color: var(--moss-dark);
@@ -1806,6 +1824,11 @@ body.resizing-panels * {
 
   .topbar-actions {
     width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .topbar-tool-button {
+    flex: 1 1 120px;
   }
 
   .modal-backdrop {
