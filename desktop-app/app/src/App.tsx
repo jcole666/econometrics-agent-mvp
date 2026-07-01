@@ -2211,7 +2211,7 @@ export default function App() {
             onDoubleClick={() => resetPanelRail("left")}
           />
 
-          <Panel title="变量配置" icon={<Wand2 size={17} />} className="variables-panel" style={panelStyle("left", "variables")}>
+          <Panel title="变量配置" icon={<Wand2 size={17} />} className="variables-panel">
             <div className="two-buttons">
               <button type="button" onClick={infer} disabled={isWorking}>
                 <Sparkles size={16} />
@@ -2246,13 +2246,6 @@ export default function App() {
               <Input label="工具变量" value={instrumentVariable} onChange={setInstrumentVariable} />
             </div>
           </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "left:variables"}
-            label="调整变量配置板块高度"
-            onPointerDown={(event) => startPanelResize("left", "variables", event)}
-            onDoubleClick={() => resetPanelRail("left")}
-          />
-
         </aside>
 
         <ColumnResizeHandle
@@ -2326,7 +2319,7 @@ export default function App() {
         />
 
         <aside className="rail rail-right">
-          <Panel title="建模问答" icon={<MessageSquare size={17} />} className="chat-panel" style={panelStyle("right", "chat")}>
+          <Panel title="小计回答" icon={<MessageSquare size={17} />} className="chat-panel" style={panelStyle("right", "chat")}>
             <div className="chat-tools">
               <button className="secondary chat-new-button" type="button" onClick={newChat} title="新建会话">
                 <Plus size={15} />
@@ -2402,7 +2395,7 @@ export default function App() {
           </Panel>
           <PanelResizeHandle
             active={panelResizeKey === "right:chat"}
-            label="调整建模问答高度"
+            label="调整小计回答高度"
             onPointerDown={(event) => startPanelResize("right", "chat", event)}
             onDoubleClick={() => resetPanelRail("right")}
           />

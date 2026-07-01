@@ -185,7 +185,7 @@ pre {
 .topbar-left {
   flex: 1 1 auto;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 14px;
   min-width: 0;
 }
@@ -587,8 +587,9 @@ body.resizing-panels * {
 }
 
 .rail-left .variables-panel {
-  flex: 1 0 auto;
-  min-height: 350px;
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
 }
 
 .rail-left .panel:nth-child(2) textarea {
