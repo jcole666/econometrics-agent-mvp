@@ -10,7 +10,7 @@ def generate_markdown_report(request: ReportRequest) -> ReportResponse:
         "# 计量分析报告",
         _section("研究问题", request.research_question),
         _section("模型选择", _model_summary(request.model_type)),
-        _section("核心结果", _results_summary(request.model_results or {})),
+        _section("核心结果", _results_summary(request.model_type, request.model_results or {})),
         _section("建模提醒", _model_notes(request.model_type)),
     ]
     if request.inference_notes:
@@ -35,7 +35,7 @@ def _model_summary(model_type: str) -> str:
     return explanations.get(normalized, f"当前模型为 {normalized}，解释前需要继续确认变量定义和模型假设。")
 
 
-def _results_summary(results: dict[str, Any]) -> str:
+def _results_summary(model_type: str, results: dict[str, Any]) -> str:
     if not results:
         return "当前还没有模型运行结果。请先运行模型，再把这一节作为正式报告内容。"
 
@@ -49,6 +49,21 @@ def _results_summary(results: dict[str, Any]) -> str:
 
     coefficients = results.get("coefficients") or []
     if coefficients:
+        main = _main_coefficient(coefficients)
+        if main:
+            lines.append(f"- 核心变量：{_coefficient_sentence(main)}")
+
+        significant = _significant_coefficients(coefficients)
+        if significant:
+            items = [
+                f"{item.get('variable', '')}（{_direction(item.get('coefficient'))}，p={_fmt(item.get('p_value'))}）"
+                for item in significant
+            ]
+            lines.append(f"- 5% 水平显著项：{'；'.join(items)}")
+        else:
+            lines.append("- 5% 水平显著项：暂未看到通过 5% 显著性检验的解释变量。")
+
+        lines.append(f"- 解释边界：{_boundary_note(model_type)}")
         lines.append("\n| 变量 | 系数 | 标准误 | 统计量 | p 值 |")
         lines.append("|---|---:|---:|---:|---:|")
         for item in coefficients:
@@ -78,8 +93,79 @@ def _model_notes(model_type: str) -> str:
     return notes.get(normalized, "建议结合变量定义、模型假设和数据结构继续检查估计是否可靠。")
 
 
-def _fmt(value: Any) -> str:
+def _main_coefficient(coefficients: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for item in coefficients:
+        if not _is_intercept(item.get("variable")) and _as_float(item.get("coefficient")) is not None:
+            return item
+    for item in coefficients:
+        if _as_float(item.get("coefficient")) is not None:
+            return item
+    return None
+
+
+def _significant_coefficients(coefficients: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    picked = []
+    for item in coefficients:
+        if _is_intercept(item.get("variable")):
+            continue
+        p_value = _as_float(item.get("p_value"))
+        if p_value is not None and p_value <= 0.05:
+            picked.append(item)
+
+    picked.sort(key=lambda item: _as_float(item.get("p_value")) or 1)
+    return picked[:3]
+
+
+def _coefficient_sentence(item: dict[str, Any]) -> str:
+    variable = item.get("variable", "")
+    coefficient = item.get("coefficient")
+    p_value = item.get("p_value")
+    return f"{variable} 为{_direction(coefficient)}，系数 {_fmt(coefficient)}，{_significance(p_value)}。"
+
+
+def _boundary_note(model_type: str) -> str:
+    normalized = model_type.strip().lower()
+    if "panel" in normalized or "fixed" in normalized:
+        return "固定效应可以控制不随时间变化的个体差异，但不能自动解决反向因果和随时间变化的遗漏变量。"
+    if "logit" in normalized:
+        return "Logit 系数主要反映方向和显著性，正式解释概率变化时建议进一步报告边际效应。"
+    if "ols" in normalized:
+        return "OLS 结果首先说明条件相关关系，是否能解释为因果影响取决于识别设计。"
+    return "当前结果适合作为初步判断，正式报告前还需要补充诊断和稳健性检验。"
+
+
+def _direction(value: Any) -> str:
+    number = _as_float(value)
+    if number is None or abs(number) < 1e-10:
+        return "接近 0"
+    return "正向" if number > 0 else "负向"
+
+
+def _significance(value: Any) -> str:
+    p_value = _as_float(value)
+    if p_value is None:
+        return "p 值暂缺"
+    if p_value <= 0.01:
+        return "1% 水平显著"
+    if p_value <= 0.05:
+        return "5% 水平显著"
+    if p_value <= 0.1:
+        return "10% 水平边际显著"
+    return "暂未通过常用显著性检验"
+
+
+def _is_intercept(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"const", "constant", "intercept", "截距"}
+
+
+def _as_float(value: Any) -> float | None:
     try:
-        return f"{float(value):.4f}"
+        number = float(value)
     except (TypeError, ValueError):
-        return ""
+        return None
+    return number
+
+
+def _fmt(value: Any) -> str:
+    number = _as_float(value)
+    return f"{number:.4f}" if number is not None else ""

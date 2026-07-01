@@ -199,3 +199,41 @@ def test_report_includes_analysis_notes() -> None:
     markdown = response.json()["markdown"]
     assert "## 分析补充" in markdown
     assert "关系线索" in markdown
+
+
+def test_report_interprets_model_results() -> None:
+    response = client.post(
+        "/generate-report",
+        json={
+            "research_question": "数字经济发展是否会提升城市创新水平？",
+            "model_type": "Panel Fixed Effects",
+            "model_results": {
+                "sample_size": 48,
+                "r_squared": 0.82,
+                "r_squared_adjusted": 0.76,
+                "coefficients": [
+                    {
+                        "variable": "digital_economy_index",
+                        "coefficient": 0.42,
+                        "std_error": 0.12,
+                        "t_statistic": 3.5,
+                        "p_value": 0.004,
+                    },
+                    {
+                        "variable": "human_capital",
+                        "coefficient": 0.08,
+                        "std_error": 0.06,
+                        "t_statistic": 1.3,
+                        "p_value": 0.21,
+                    },
+                ],
+            },
+            "llm_config": {"enabled": False},
+        },
+    )
+
+    assert response.status_code == 200
+    markdown = response.json()["markdown"]
+    assert "核心变量：digital_economy_index 为正向" in markdown
+    assert "5% 水平显著项：digital_economy_index" in markdown
+    assert "解释边界：固定效应" in markdown
