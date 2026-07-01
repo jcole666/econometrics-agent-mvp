@@ -81,6 +81,19 @@ interface ResizeSession {
   right: number;
 }
 
+interface ResearchPath {
+  question: string;
+  questionCandidates: string[];
+  structure: string;
+  outcome: string;
+  coreVariables: string[];
+  controls: string[];
+  model: string;
+  assumptions: string[];
+  risks: string[];
+  nextSteps: string[];
+}
+
 interface ModelSettings {
   enabled: boolean;
   baseUrl: string;
@@ -230,6 +243,157 @@ function providerLabel(provider: string | undefined): string {
 
 function modelLabel(model: string | undefined): string {
   return MODEL_OPTIONS.find((item) => item.value === model)?.label ?? model ?? "";
+}
+
+function firstExistingColumn(profile: DataProfile, names: string[]): string | null {
+  const available = new Set(profile.columns.map((column) => column.name));
+  return names.find((name) => available.has(name)) ?? null;
+}
+
+function fallbackOutcome(profile: DataProfile): string {
+  return (
+    firstExistingColumn(profile, ["innovation_index", "income", "employment", "gdp", "score"]) ??
+    profile.columns.find((column) => column.kind === "数值")?.name ??
+    DEFAULT_DEPENDENT_VARIABLE
+  );
+}
+
+function fallbackCoreVariables(profile: DataProfile, outcome: string): string[] {
+  const preferred = [
+    "digital_economy_index",
+    "broadband_access",
+    "fiscal_science_spending",
+    "human_capital",
+    "industrial_upgrade",
+    "population_density",
+    "smart_city_pilot",
+  ];
+  const picked = preferred.filter((name) => profile.columns.some((column) => column.name === name && name !== outcome));
+  if (picked.length) return picked;
+
+  return profile.columns
+    .filter((column) => column.name !== outcome && (column.kind === "数值" || column.kind === "二元/布尔"))
+    .map((column) => column.name)
+    .slice(0, 5);
+}
+
+function questionCandidates(profile: DataProfile, outcome: string, coreVariables: string[]): string[] {
+  const hasCityDemo = Boolean(firstExistingColumn(profile, ["digital_economy_index"])) && outcome === "innovation_index";
+  if (hasCityDemo) {
+    return [
+      "数字经济发展是否会提升城市创新水平？",
+      "智慧城市试点后，城市创新指数是否出现更快增长？",
+      "数字基础设施、财政科技支出和人力资本中，哪类因素更能解释城市创新差异？",
+    ];
+  }
+
+  const core = coreVariables[0] ?? "核心解释变量";
+  return [
+    `${core} 与 ${outcome} 是否存在稳定关系？`,
+    `在加入控制变量后，${core} 对 ${outcome} 的关系是否仍然明显？`,
+    `不同个体或时期之间，${outcome} 的变化是否具有结构性差异？`,
+  ];
+}
+
+function structureSummary(profile: DataProfile, entityColumn: string | null, timeColumn: string | null): string {
+  const panel = profile.diagnostics?.panel_hint;
+  if (panel) {
+    return `识别到 ${panel.entity_column} × ${panel.time_column} 面板结构：${panel.units} 个个体、${panel.periods} 期，${panel.is_balanced ? "平衡面板" : `缺 ${panel.missing_cells} 个观测格`}。`;
+  }
+  if (entityColumn && timeColumn) {
+    return `已配置 ${entityColumn} × ${timeColumn} 面板结构，可进一步确认是否加入个体和时间固定效应。`;
+  }
+  return `当前数据包含 ${profile.rows} 行、${profile.columns_count} 个字段，适合先做变量识别和数据质量核查。`;
+}
+
+function modelFromPath(modelType: string, recommendation: ModelRecommendation | null, entityColumn: string | null, timeColumn: string | null): string {
+  if (recommendation?.model) return recommendation.model;
+  if (entityColumn && timeColumn) return "Panel Fixed Effects";
+  return modelType || "OLS";
+}
+
+function assumptionsForModel(model: string): string[] {
+  if (model === "Panel Fixed Effects") {
+    return ["个体固定效应能够吸收不随时间变化的城市特征", "年份冲击需要通过时间固定效应或年份变量控制", "核心解释变量仍需满足严格外生性假设"];
+  }
+  if (model === "DID") {
+    return ["处理组和对照组在政策前具有可比趋势", "政策实施时间和处理状态定义清楚", "需要检查是否存在提前反应或其他同期政策冲击"];
+  }
+  if (model === "Logit") {
+    return ["被解释变量应为 0/1 结果", "需要关注类别不平衡和边际效应解释", "线性概率模型可作为可解释性对照"];
+  }
+  if (model === "IV-2SLS") {
+    return ["工具变量要与内生解释变量相关", "工具变量不能直接影响结果变量", "需要报告弱工具变量检验"];
+  }
+  return ["解释变量与误差项外生", "函数形式设定合理", "建议使用稳健标准误并检查多重共线性"];
+}
+
+function risksFromProfile(profile: DataProfile, model: string): string[] {
+  const warnings = profile.diagnostics?.modeling_warnings.map((item) => `${item.name}：${item.reason}`) ?? [];
+  const risks = warnings.slice(0, 3);
+
+  if (model === "Panel Fixed Effects") {
+    risks.push("面板固定效应可以降低遗漏的时间不变因素影响，但不能自动解决反向因果。");
+  } else {
+    risks.push("当前路径首先支持相关性分析，若要做因果解释，需要补充识别策略。");
+  }
+
+  if (profile.diagnostics?.outlier_columns.length) {
+    risks.push("部分数值字段存在 IQR 异常值，建模前需要确认是否截尾或保留。");
+  }
+  return risks;
+}
+
+function nextStepsForPath(model: string): string[] {
+  if (model === "Panel Fixed Effects") {
+    return ["确认城市和年份固定效应设定", "准备聚类稳健标准误", "比较加入/不加入控制变量时核心系数是否稳定"];
+  }
+  if (model === "DID") {
+    return ["画出政策前趋势", "确认处理组和对照组定义", "设计安慰剂检验或事件研究图"];
+  }
+  return ["确认 Y 和核心 X", "检查缺失值和异常值处理", "准备稳健性检验和替代变量设定"];
+}
+
+function buildResearchPath({
+  profile,
+  question,
+  dependentVariable,
+  independentVariables,
+  entityColumn,
+  timeColumn,
+  modelType,
+  recommendation,
+}: {
+  profile: DataProfile | null;
+  question: string;
+  dependentVariable: string;
+  independentVariables: string;
+  entityColumn: string;
+  timeColumn: string;
+  modelType: string;
+  recommendation: ModelRecommendation | null;
+}): ResearchPath | null {
+  if (!profile) return null;
+
+  const panel = profile.diagnostics?.panel_hint;
+  const entity = entityColumn.trim() || panel?.entity_column || null;
+  const time = timeColumn.trim() || panel?.time_column || null;
+  const outcome = dependentVariable.trim() || fallbackOutcome(profile);
+  const coreVariables = splitList(independentVariables).length ? splitList(independentVariables) : fallbackCoreVariables(profile, outcome);
+  const model = modelFromPath(modelType, recommendation, entity, time);
+
+  return {
+    question: question.trim() || DEFAULT_QUESTION,
+    questionCandidates: questionCandidates(profile, outcome, coreVariables),
+    structure: structureSummary(profile, entity, time),
+    outcome,
+    coreVariables: coreVariables.slice(0, 3),
+    controls: coreVariables.slice(3, 8),
+    model,
+    assumptions: assumptionsForModel(model),
+    risks: risksFromProfile(profile, model),
+    nextSteps: nextStepsForPath(model),
+  };
 }
 
 function missingModelSettings(settings: ModelSettings): string[] {
@@ -635,6 +799,20 @@ export default function App() {
         return text.includes(keyword);
       });
   }, [chatSearch, chatState.sessions]);
+  const researchPath = useMemo(
+    () =>
+      buildResearchPath({
+        profile,
+        question,
+        dependentVariable,
+        independentVariables,
+        entityColumn,
+        timeColumn,
+        modelType,
+        recommendation,
+      }),
+    [dependentVariable, entityColumn, independentVariables, modelType, profile, question, recommendation, timeColumn]
+  );
 
   function workspaceRailSpace() {
     const node = workspaceRef.current;
@@ -1273,6 +1451,10 @@ export default function App() {
             <ProfileTable profile={profile} />
           </Panel>
 
+          <Panel title="研究路径" icon={<Sparkles size={17} />}>
+            <ResearchPathView path={researchPath} />
+          </Panel>
+
           <Panel title="模型推荐" icon={<Cpu size={17} />}>
             <div className="runbar">
               <select value={modelType} onChange={(event) => setModelType(event.target.value)}>
@@ -1735,6 +1917,76 @@ function DataDiagnosticsView({ profile }: { profile: DataProfile }) {
             <li key={item}>{item}</li>
           ))}
         </ul>
+      </div>
+    </div>
+  );
+}
+
+function ResearchPathView({ path }: { path: ResearchPath | null }) {
+  if (!path) {
+    return <div className="empty">等待数据画像。</div>;
+  }
+
+  return (
+    <div className="research-path">
+      <div className="path-question">
+        <span>当前主线</span>
+        <strong>{path.question}</strong>
+      </div>
+
+      <div className="path-section">
+        <div className="path-title">可追问的问题</div>
+        <ul className="path-list">
+          {path.questionCandidates.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="path-grid">
+        <div className="path-card">
+          <span>数据结构</span>
+          <p>{path.structure}</p>
+        </div>
+        <div className="path-card">
+          <span>变量设定</span>
+          <p>Y：{path.outcome}</p>
+          <p>X：{path.coreVariables.join(", ") || "待确认"}</p>
+          {path.controls.length ? <p>控制：{path.controls.join(", ")}</p> : null}
+        </div>
+        <div className="path-card">
+          <span>推荐方向</span>
+          <strong>{modelLabel(path.model)}</strong>
+          <p>{path.model === "Panel Fixed Effects" ? "适合先整理固定效应模型，再讨论因果解释边界。" : "适合先建立基准模型，再逐步加入识别设计。"}</p>
+        </div>
+      </div>
+
+      <div className="path-columns">
+        <div className="path-section">
+          <div className="path-title">关键假设</div>
+          <ul className="path-list">
+            {path.assumptions.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="path-section">
+          <div className="path-title">风险边界</div>
+          <ul className="path-list">
+            {path.risks.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="path-section">
+        <div className="path-title">下一步判断</div>
+        <div className="path-tags">
+          {path.nextSteps.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
       </div>
     </div>
   );
