@@ -72,6 +72,10 @@ def test_disabled_llm_config_uses_rules() -> None:
     body = response.json()
     assert body["provider"] == "rules"
     assert body["maas_used"] is False
+    assert body["model"] == "Panel Fixed Effects"
+    assert "city" in body["reason"]
+    assert "year" in body["reason"]
+    assert any("固定效应" in item for item in body["required_checks"])
 
 
 def test_chat_requires_model_config() -> None:
