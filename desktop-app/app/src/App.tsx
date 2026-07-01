@@ -256,6 +256,56 @@ function modelLabel(model: string | undefined): string {
   return MODEL_OPTIONS.find((item) => item.value === model)?.label ?? model ?? "";
 }
 
+function hasNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isIntercept(variable: string): boolean {
+  return ["const", "constant", "intercept", "截距"].includes(variable.trim().toLowerCase());
+}
+
+function coefficientDirection(value: number | null | undefined): string {
+  if (!hasNumber(value) || Math.abs(value) < 1e-10) return "接近 0";
+  return value > 0 ? "正向" : "负向";
+}
+
+function significanceText(pValue: number | null | undefined): string {
+  if (!hasNumber(pValue)) return "p 值暂缺";
+  if (pValue <= 0.01) return "1% 水平显著";
+  if (pValue <= 0.05) return "5% 水平显著";
+  if (pValue <= 0.1) return "10% 水平边际显著";
+  return "暂未通过常用显著性检验";
+}
+
+function mainCoefficient(coefficients: CoefficientResult[]): CoefficientResult | null {
+  return (
+    coefficients.find((item) => !isIntercept(item.variable) && hasNumber(item.coefficient)) ??
+    coefficients.find((item) => hasNumber(item.coefficient)) ??
+    null
+  );
+}
+
+function significantCoefficients(coefficients: CoefficientResult[]): CoefficientResult[] {
+  return coefficients
+    .filter((item) => !isIntercept(item.variable) && hasNumber(item.p_value) && item.p_value <= 0.05)
+    .sort((left, right) => (left.p_value ?? 1) - (right.p_value ?? 1))
+    .slice(0, 3);
+}
+
+function resultBoundary(model: string | undefined): string {
+  const normalized = (model ?? "").toLowerCase();
+  if (normalized.includes("panel") || normalized.includes("fixed")) {
+    return "固定效应更适合看组内变化，但仍要说明识别假设、遗漏变量和反向因果。";
+  }
+  if (normalized.includes("logit")) {
+    return "Logit 系数先看方向和显著性，概率变化建议再算边际效应。";
+  }
+  if (normalized.includes("ols")) {
+    return "OLS 描述的是条件相关关系，能否上升到因果结论要看识别设计。";
+  }
+  return "当前结果适合作为第一版判断，正式写作前还需要补充稳健性和诊断检查。";
+}
+
 function firstExistingColumn(profile: DataProfile, names: string[]): string | null {
   const available = new Set(profile.columns.map((column) => column.name));
   return names.find((name) => available.has(name)) ?? null;
@@ -2502,7 +2552,41 @@ function RunResultView({ result, notice }: { result: RunModelResponse | null; no
           {warning}
         </p>
       ))}
+      <ResultInterpretation result={result} />
       <CoefficientTable coefficients={result.results.coefficients} />
+    </div>
+  );
+}
+
+function ResultInterpretation({ result }: { result: RunModelResponse }) {
+  if (!result.results) return null;
+
+  const primary = mainCoefficient(result.results.coefficients);
+  const significant = significantCoefficients(result.results.coefficients);
+  const primaryText =
+    primary && hasNumber(primary.coefficient)
+      ? `${primary.variable} 为${coefficientDirection(primary.coefficient)}，系数 ${formatNumber(primary.coefficient)}，${significanceText(primary.p_value)}。`
+      : "还没有可直接解读的核心系数。";
+  const significantText = significant.length
+    ? significant
+        .map((item) => `${item.variable}（${coefficientDirection(item.coefficient)}，p=${formatNumber(item.p_value)}）`)
+        .join("；")
+    : "暂未看到 5% 水平显著的解释变量。";
+
+  return (
+    <div className="result-insights">
+      <section className="result-insight-card">
+        <span>核心变量</span>
+        <p>{primaryText}</p>
+      </section>
+      <section className="result-insight-card">
+        <span>显著项</span>
+        <p>{significantText}</p>
+      </section>
+      <section className="result-insight-card">
+        <span>解释边界</span>
+        <p>{resultBoundary(result.model_type)}</p>
+      </section>
     </div>
   );
 }
