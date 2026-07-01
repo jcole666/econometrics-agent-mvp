@@ -81,6 +81,7 @@ def _guess_dependent_variable(columns: list[str], lower_names: dict[str, str], q
         (["employment", "job", "就业"], ["employment", "employ", "job", "就业"]),
         (["profit", "利润"], ["profit", "利润"]),
         (["gdp", "output", "产出"], ["gdp", "output", "产出"]),
+        (["innovation", "patent", "r&d", "research", "创新", "专利", "研发"], ["innovation", "patent", "r_d", "rnd", "research", "创新", "专利", "研发"]),
     ]
     for question_terms, column_terms in groups:
         if _mentions_any(question, question_terms):
@@ -155,7 +156,12 @@ def _valid_name(value: Any, valid: set[str]) -> str | None:
 
 
 def _is_obvious_identifier(name: str, lowered: str) -> bool:
-    return lowered == "id" or lowered.endswith("_id") or lowered in {"uuid", "index", "编号"}
+    return (
+        lowered == "id"
+        or lowered.endswith("_id")
+        or lowered.endswith("_code")
+        or lowered in {"uuid", "index", "编号", "city", "province", "region"}
+    )
 
 
 def _mentions_any(text: str, keywords: list[str]) -> bool:

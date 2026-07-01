@@ -36,7 +36,7 @@ def app_root() -> Path:
 
 
 PROJECT_ROOT = app_root()
-SAMPLE_DATA_PATH = PROJECT_ROOT / "examples" / "sample_wage.csv"
+SAMPLE_DATA_PATH = PROJECT_ROOT / "examples" / "sample_city_panel.csv"
 
 app = FastAPI(
     title="计量建模 Agent 工作台后端",
@@ -77,7 +77,7 @@ def sample_profile() -> dict:
 
 @app.get("/sample-data")
 def sample_data() -> FileResponse:
-    return FileResponse(SAMPLE_DATA_PATH, media_type="text/csv", filename="sample_wage.csv")
+    return FileResponse(SAMPLE_DATA_PATH, media_type="text/csv", filename="sample_city_panel.csv")
 
 
 @app.post("/infer-variables", response_model=InferVariablesResponse)

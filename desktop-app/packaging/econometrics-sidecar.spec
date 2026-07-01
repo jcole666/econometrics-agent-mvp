@@ -26,7 +26,7 @@ for package in PACKAGES:
     hiddenimports += collect_submodules(package)
 
 datas = [
-    (str(ROOT / "examples" / "sample_wage.csv"), "examples"),
+    (str(ROOT / "examples" / "sample_city_panel.csv"), "examples"),
 ]
 datas += collect_data_files("pandas")
 datas += collect_data_files("statsmodels")

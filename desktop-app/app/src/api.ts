@@ -46,7 +46,7 @@ export async function loadSampleFile(): Promise<File> {
     throw new Error("无法加载样例数据。");
   }
   const blob = await response.blob();
-  return new File([blob], "sample_wage.csv", { type: "text/csv" });
+  return new File([blob], "sample_city_panel.csv", { type: "text/csv" });
 }
 
 export async function inferVariables(payload: InferVariablesRequest): Promise<InferVariablesResponse> {

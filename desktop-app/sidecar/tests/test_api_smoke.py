@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sidecar.api import app
 
 ROOT = Path(__file__).resolve().parents[2]
-SAMPLE_PATH = ROOT / "examples" / "sample_wage.csv"
+SAMPLE_PATH = ROOT / "examples" / "sample_city_panel.csv"
 
 
 client = TestClient(app)
@@ -20,14 +20,15 @@ def test_health_endpoint() -> None:
     assert response.json()["status"] == "ok"
 
 
-def test_variable_inference_for_wage_question() -> None:
+def test_variable_inference_for_city_panel_question() -> None:
     payload = {
-        "research_question": "Does education affect income after controlling for experience and gender?",
+        "research_question": "Does the digital economy improve urban innovation?",
         "columns": [
-            {"name": "income", "dtype": "int64", "sample_values": ["3720", "3970"]},
-            {"name": "education", "dtype": "int64", "sample_values": ["12", "16"]},
-            {"name": "experience", "dtype": "int64", "sample_values": ["2", "8"]},
-            {"name": "gender", "dtype": "int64", "sample_values": ["0", "1"]},
+            {"name": "city", "dtype": "object", "sample_values": ["Shanghai", "Suzhou"]},
+            {"name": "year", "dtype": "int64", "sample_values": ["2018", "2019"]},
+            {"name": "innovation_index", "dtype": "float64", "sample_values": ["82.3", "84.1"]},
+            {"name": "digital_economy_index", "dtype": "float64", "sample_values": ["78.6", "80.4"]},
+            {"name": "fiscal_science_spending", "dtype": "float64", "sample_values": ["5.8", "6.0"]},
         ],
     }
 
@@ -35,16 +36,18 @@ def test_variable_inference_for_wage_question() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["dependent_variable"] == "income"
-    assert "education" in body["independent_variables"]
+    assert body["dependent_variable"] == "innovation_index"
+    assert body["entity_column"] == "city"
+    assert body["time_column"] == "year"
+    assert "digital_economy_index" in body["independent_variables"]
 
 
 def test_disabled_llm_config_uses_rules() -> None:
     payload = {
-        "research_question": "Does education affect income?",
-        "columns": ["income", "education", "experience"],
-        "dependent_variable": "income",
-        "independent_variables": ["education", "experience"],
+        "research_question": "Does the digital economy improve urban innovation?",
+        "columns": ["city", "year", "innovation_index", "digital_economy_index", "human_capital"],
+        "dependent_variable": "innovation_index",
+        "independent_variables": ["digital_economy_index", "human_capital"],
         "llm_config": {"enabled": False},
     }
 
@@ -78,11 +81,11 @@ def test_ols_runner_returns_coefficients() -> None:
     with SAMPLE_PATH.open("rb") as handle:
         response = client.post(
             "/run-model",
-            files={"file": ("sample_wage.csv", handle, "text/csv")},
+            files={"file": ("sample_city_panel.csv", handle, "text/csv")},
             data={
                 "model_type": "OLS",
-                "dependent_variable": "income",
-                "independent_variables": "education,experience,gender",
+                "dependent_variable": "innovation_index",
+                "independent_variables": "digital_economy_index,broadband_access,fiscal_science_spending,human_capital,industrial_upgrade,population_density",
             },
         )
 
@@ -96,11 +99,11 @@ def test_unsupported_complex_model_returns_business_error() -> None:
     with SAMPLE_PATH.open("rb") as handle:
         response = client.post(
             "/run-model",
-            files={"file": ("sample_wage.csv", handle, "text/csv")},
+            files={"file": ("sample_city_panel.csv", handle, "text/csv")},
             data={
                 "model_type": "RDD",
-                "dependent_variable": "income",
-                "independent_variables": "education,experience",
+                "dependent_variable": "innovation_index",
+                "independent_variables": "digital_economy_index,human_capital",
             },
         )
 

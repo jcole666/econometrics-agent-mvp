@@ -46,10 +46,10 @@ import type {
   RunModelResponse
 } from "./types";
 
-const DEFAULT_QUESTION = "教育水平是否会在控制工作经验和性别后影响收入？";
-const DEFAULT_COLUMNS = "income, education, experience, gender";
-const DEFAULT_DEPENDENT_VARIABLE = "income";
-const DEFAULT_INDEPENDENT_VARIABLES = "education, experience, gender";
+const DEFAULT_QUESTION = "数字经济发展是否会提升城市创新水平？";
+const DEFAULT_COLUMNS = "city, province, region, year, innovation_index, digital_economy_index, broadband_access, fiscal_science_spending, human_capital, industrial_upgrade, population_density, smart_city_pilot, green_patent_share";
+const DEFAULT_DEPENDENT_VARIABLE = "innovation_index";
+const DEFAULT_INDEPENDENT_VARIABLES = "digital_economy_index, broadband_access, fiscal_science_spending, human_capital, industrial_upgrade, population_density";
 const QUESTION_PLACEHOLDER = `例如：${DEFAULT_QUESTION}`;
 const COLUMNS_PLACEHOLDER = `例如：${DEFAULT_COLUMNS}`;
 const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${DEFAULT_DEPENDENT_VARIABLE}`;
