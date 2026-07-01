@@ -1659,6 +1659,13 @@ export default function App() {
     setRunNotice(null);
   }
 
+  function useCandidateQuestion(questionText: string) {
+    setActiveView("workflow");
+    updateQuestion(questionText);
+    setStatus("已采用候选研究问题。");
+    window.setTimeout(() => questionInputRef.current?.focus(), 0);
+  }
+
   function toggleCheckpoint(id: string) {
     setConfirmedCheckpoints((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
@@ -2418,7 +2425,11 @@ export default function App() {
 
             {activeView === "path" ? (
               <Panel title="研究路径" icon={<Sparkles size={17} />} className="focus-panel">
-                <ResearchPathView path={researchPath} />
+                <ResearchPathView
+                  path={researchPath}
+                  onUseQuestion={useCandidateQuestion}
+                  onAskQuestion={prepareReviewQuestion}
+                />
                 <CollaborationCheckpoints
                   checkpoints={collaborationCheckpoints}
                   confirmedIds={confirmedCheckpoints}
@@ -3263,7 +3274,15 @@ function shortVariableName(name: string): string {
   return name.length > 18 ? `${name.slice(0, 15)}...` : name;
 }
 
-function ResearchPathView({ path }: { path: ResearchPath | null }) {
+function ResearchPathView({
+  path,
+  onUseQuestion,
+  onAskQuestion
+}: {
+  path: ResearchPath | null;
+  onUseQuestion: (question: string) => void;
+  onAskQuestion: (question: string) => void;
+}) {
   if (!path) {
     return <div className="empty">等待数据画像。</div>;
   }
@@ -3277,11 +3296,17 @@ function ResearchPathView({ path }: { path: ResearchPath | null }) {
 
       <div className="path-section">
         <div className="path-title">可追问的问题</div>
-        <ul className="path-list">
+        <div className="question-candidate-list">
           {path.questionCandidates.map((item) => (
-            <li key={item}>{item}</li>
+            <div className="question-candidate" key={item}>
+              <p>{item}</p>
+              <div>
+                <button type="button" onClick={() => onUseQuestion(item)}>采用</button>
+                <button type="button" onClick={() => onAskQuestion(`围绕这个研究问题继续展开：${item}`)}>追问</button>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
 
       <div className="path-grid">
