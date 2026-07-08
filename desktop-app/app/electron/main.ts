@@ -46,6 +46,171 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
+function inlineMarkdown(value: string) {
+  return escapeHtml(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+}
+
+function tableCells(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function isTableRow(line: string) {
+  const text = line.trim();
+  return text.startsWith("|") && text.endsWith("|") && text.includes("|");
+}
+
+function isTableSeparator(line: string) {
+  if (!isTableRow(line)) return false;
+  return tableCells(line).every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function isFormulaStart(text: string) {
+  return text.startsWith("$$") || text.startsWith("\\[") || /^\\begin\{[^}]+\}/.test(text);
+}
+
+function isFormulaEnd(text: string, firstLine: string) {
+  if (firstLine.startsWith("$$")) return text.endsWith("$$");
+  if (firstLine.startsWith("\\[")) return text.endsWith("\\]");
+  const env = firstLine.match(/^\\begin\{([^}]+)\}/)?.[1];
+  return Boolean(env && text.startsWith(`\\end{${env}}`));
+}
+
+function markdownToHtml(markdown: string) {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const html: string[] = [];
+  let index = 0;
+  let inList = false;
+
+  const closeList = () => {
+    if (inList) {
+      html.push("</ul>");
+      inList = false;
+    }
+  };
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const text = line.trim();
+
+    if (!text) {
+      closeList();
+      index += 1;
+      continue;
+    }
+
+    const codeStart = text.match(/^```([\w-]*)/);
+    if (codeStart) {
+      closeList();
+      const codeLines: string[] = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith("```")) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+      html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+      continue;
+    }
+
+    const heading = text.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = Math.min(heading[1].length, 3);
+      html.push(`<h${level}>${inlineMarkdown(heading[2].trim())}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    if (isTableRow(text) && index + 1 < lines.length && isTableSeparator(lines[index + 1].trim())) {
+      closeList();
+      const headers = tableCells(text);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && isTableRow(lines[index].trim()) && !isTableSeparator(lines[index].trim())) {
+        const cells = tableCells(lines[index]);
+        rows.push(headers.map((_, cellIndex) => cells[cellIndex] ?? ""));
+        index += 1;
+      }
+      html.push("<table><thead><tr>");
+      html.push(headers.map((header) => `<th>${inlineMarkdown(header)}</th>`).join(""));
+      html.push("</tr></thead><tbody>");
+      for (const row of rows) {
+        html.push("<tr>");
+        html.push(row.map((cell) => `<td>${inlineMarkdown(cell)}</td>`).join(""));
+        html.push("</tr>");
+      }
+      html.push("</tbody></table>");
+      continue;
+    }
+
+    if (isFormulaStart(text)) {
+      closeList();
+      const firstLine = text;
+      const formulaLines = [line.trim()];
+      index += 1;
+      const closedOnFirstLine =
+        (firstLine.startsWith("$$") && firstLine.length > 2 && firstLine.endsWith("$$")) ||
+        (firstLine.startsWith("\\[") && firstLine.endsWith("\\]")) ||
+        /^\\begin\{([^}]+)\}.*\\end\{\1\}$/.test(firstLine);
+
+      if (!closedOnFirstLine) {
+        while (index < lines.length && !isFormulaEnd(lines[index].trim(), firstLine)) {
+          formulaLines.push(lines[index].trim());
+          index += 1;
+        }
+        if (index < lines.length) {
+          formulaLines.push(lines[index].trim());
+          index += 1;
+        }
+      }
+      html.push(`<div class="formula">${escapeHtml(formulaLines.join("\n"))}</div>`);
+      continue;
+    }
+
+    const item = text.match(/^[-*]\s+(.+)$/);
+    if (item) {
+      if (!inList) {
+        html.push("<ul>");
+        inList = true;
+      }
+      html.push(`<li>${inlineMarkdown(item[1])}</li>`);
+      index += 1;
+      continue;
+    }
+
+    closeList();
+    const paragraph = [text];
+    index += 1;
+    while (index < lines.length) {
+      const nextText = lines[index].trim();
+      if (
+        !nextText ||
+        nextText.startsWith("```") ||
+        /^(#{1,4})\s+/.test(nextText) ||
+        /^[-*]\s+/.test(nextText) ||
+        isTableRow(nextText) ||
+        isFormulaStart(nextText)
+      ) {
+        break;
+      }
+      paragraph.push(nextText);
+      index += 1;
+    }
+    html.push(`<p>${inlineMarkdown(paragraph.join(" "))}</p>`);
+  }
+
+  closeList();
+  return html.join("\n");
+}
+
 function reportHtml(title: string, markdown: string) {
   return `<!doctype html>
 <html>
@@ -63,17 +228,74 @@ function reportHtml(title: string, markdown: string) {
       margin: 0 0 18px;
       font-size: 22px;
     }
+    h2 {
+      margin: 26px 0 10px;
+      border-bottom: 1px solid #d9ddd8;
+      padding-bottom: 7px;
+      font-size: 18px;
+    }
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 15px;
+    }
+    p {
+      margin: 8px 0;
+    }
+    ul {
+      margin: 8px 0 12px 20px;
+      padding: 0;
+    }
+    li {
+      margin: 4px 0;
+    }
+    table {
+      width: 100%;
+      margin: 14px 0;
+      border: 1px solid #d9ddd8;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      border: 1px solid #d9ddd8;
+      padding: 7px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f3f4f2;
+      font-weight: 700;
+    }
     pre {
-      margin: 0;
+      margin: 12px 0;
+      border: 1px solid #d9ddd8;
+      border-radius: 6px;
+      background: #f6f6f3;
+      padding: 10px;
       white-space: pre-wrap;
       word-break: break-word;
-      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+    }
+    code {
+      border-radius: 4px;
+      background: #f1f1ee;
+      padding: 1px 4px;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+    }
+    .formula {
+      margin: 12px 0;
+      border-left: 3px solid #202123;
+      background: #f6f6f3;
+      padding: 10px 12px;
+      white-space: pre-wrap;
+      font-family: "Cambria Math", "Times New Roman", serif;
     }
   </style>
 </head>
 <body>
   <h1>${escapeHtml(title)}</h1>
-  <pre>${escapeHtml(markdown)}</pre>
+  <main>${markdownToHtml(markdown)}</main>
 </body>
 </html>`;
 }
@@ -86,67 +308,7 @@ function userGuidePath() {
 }
 
 function guideMarkdownToHtml(markdown: string) {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
-  const html: string[] = [];
-  let inList = false;
-  let inCode = false;
-  const codeLines: string[] = [];
-
-  const closeList = () => {
-    if (inList) {
-      html.push("</ul>");
-      inList = false;
-    }
-  };
-
-  for (const line of lines) {
-    const text = line.trim();
-
-    if (text.startsWith("```")) {
-      if (inCode) {
-        html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
-        codeLines.length = 0;
-        inCode = false;
-      } else {
-        closeList();
-        inCode = true;
-      }
-      continue;
-    }
-
-    if (inCode) {
-      codeLines.push(line);
-      continue;
-    }
-
-    if (!text) {
-      closeList();
-      continue;
-    }
-
-    const heading = text.match(/^(#{1,3})\s+(.+)$/);
-    if (heading) {
-      closeList();
-      html.push(`<h${heading[1].length}>${escapeHtml(heading[2])}</h${heading[1].length}>`);
-      continue;
-    }
-
-    const item = text.match(/^[-*]\s+(.+)$/);
-    if (item) {
-      if (!inList) {
-        html.push("<ul>");
-        inList = true;
-      }
-      html.push(`<li>${escapeHtml(item[1])}</li>`);
-      continue;
-    }
-
-    closeList();
-    html.push(`<p>${escapeHtml(text)}</p>`);
-  }
-
-  closeList();
-  return html.join("\n");
+  return markdownToHtml(markdown);
 }
 
 function guideHtml(markdown: string) {

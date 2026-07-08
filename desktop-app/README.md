@@ -29,7 +29,7 @@ scripts/      构建脚本
 打包流程会先确认 sidecar exe，再构建 Electron portable 应用。输出位置：
 
 ```text
-app\release\Econometrics-Agent-Workbench-0.1.0-portable.exe
+app\release\Econometrics-Agent-Workbench-0.2.0-portable.exe
 ```
 
 需要强制重建 sidecar 时：
@@ -73,6 +73,8 @@ npm run dev:electron
 ```
 
 这个模式只用于开发。正式给别人用时，直接发 `app\release\` 里的 portable exe。
+
+模型选择与前提条件检验框架放在仓库根目录的 `docs/model-check-framework.md`，打包时也会作为文档资源带进应用。
 
 ## 检查
 

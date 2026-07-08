@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,13 @@ from urllib import error, request as urlrequest
 from sidecar.schemas import LLMConfig, ModelRequest
 from sidecar.services.code_generator import generate_code
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+def _project_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    return Path(__file__).resolve().parents[2]
+
+
 DEFAULT_BASE_URL = "https://api.modelarts-maas.com/openai/v1"
 DEFAULT_MODEL = "deepseek-v4-pro-IckBJP"
 SUPPORTED_MODELS = {"OLS", "Logit", "Panel Fixed Effects", "DID", "IV-2SLS", "RDD"}
@@ -125,7 +132,7 @@ def _load_local_env() -> None:
     if getattr(_load_local_env, "_done", False):
         return
 
-    env_path = PROJECT_ROOT / ".env"
+    env_path = _project_root() / ".env"
     if env_path.exists():
         for line in env_path.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()

@@ -1,5 +1,7 @@
 import {
   Activity,
+  ArrowLeft,
+  ArrowRight,
   BookOpen,
   ChevronDown,
   Cpu,
@@ -7,7 +9,9 @@ import {
   Download,
   FileText,
   FileUp,
+  HelpCircle,
   MessageSquare,
+  Minimize2,
   Play,
   Plus,
   RefreshCw,
@@ -57,7 +61,7 @@ const QUESTION_PLACEHOLDER = `例如：${DEFAULT_QUESTION}`;
 const COLUMNS_PLACEHOLDER = `例如：${DEFAULT_COLUMNS}`;
 const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${DEFAULT_DEPENDENT_VARIABLE}`;
 const INDEPENDENT_VARIABLES_PLACEHOLDER = `例如：${DEFAULT_INDEPENDENT_VARIABLES}`;
-const CHAT_PLACEHOLDER = "为什么推荐这个模型？";
+const CHAT_PLACEHOLDER = "例如：为什么推荐这个模型？";
 const SETTINGS_KEY = "econometrics-agent.model-settings";
 const CHAT_SESSIONS_KEY = "econometrics-agent.chat-sessions";
 const ACTIVE_CHAT_KEY = "econometrics-agent.active-chat";
@@ -99,35 +103,9 @@ type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "
 type DemoStage = "idle" | "data" | "recommend" | "run" | "report" | "ready" | "error";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
-type WorkbenchView = "workflow" | "profile" | "path" | "report" | "guide";
 type RailId = keyof typeof DEFAULT_PANEL_HEIGHTS;
 type PanelId = keyof typeof PANEL_MIN_HEIGHTS;
 type PanelHeights = Record<RailId, Partial<Record<PanelId, number>>>;
-
-const DEMO_FLOW_STEPS: Array<{ stage: DemoStage; title: string; detail: string }> = [
-  { stage: "data", title: "加载演示数据", detail: "城市 × 年份面板数据" },
-  { stage: "recommend", title: "推荐模型", detail: "面板固定效应路径" },
-  { stage: "run", title: "运行结果", detail: "系数、显著性和 R2" },
-  { stage: "report", title: "生成报告", detail: "Markdown 草稿" }
-];
-const DEMO_REVIEW_QUESTIONS = [
-  {
-    label: "因果边界",
-    question: "这条结果能不能解释为因果？还需要补哪些识别假设和稳健性检验？"
-  },
-  {
-    label: "数据质量",
-    question: "字段画像里哪些数据质量风险最值得先查？这些风险会怎样影响模型解释？"
-  },
-  {
-    label: "项目差异",
-    question: "这个演示相比直接让普通 LLM 写一个 OLS，有什么不一样？"
-  },
-  {
-    label: "现场回应",
-    question: "如果老师质疑演示数据规模不大，我应该怎么回应这个 Demo 的价值？"
-  }
-];
 
 interface RailWidths {
   left: number;
@@ -197,19 +175,6 @@ type ChatMarkdownBlock =
   | { kind: "code"; language: string; code: string }
   | { kind: "formula"; text: string }
   | { kind: "rule" };
-
-interface DemoScriptSection {
-  time: string;
-  title: string;
-  text: string;
-}
-
-interface DefenseCard {
-  title: string;
-  question: string;
-  answer: string;
-  prompt: string;
-}
 
 const MODEL_OPTIONS = [
   { value: "OLS", label: "OLS 线性回归" },
@@ -422,137 +387,6 @@ function isDemoProfile(profile: DataProfile | null): boolean {
   return names.has("innovation_index") && names.has("digital_economy_index") && names.has("city") && names.has("year");
 }
 
-function primaryRelationship(profile: DataProfile | null): RelationshipHint | null {
-  const hints = profile?.diagnostics?.relationship_hints ?? [];
-  return (
-    hints.find((item) => (
-      [item.left, item.right].includes("innovation_index") &&
-      [item.left, item.right].includes("digital_economy_index")
-    )) ??
-    hints[0] ??
-    null
-  );
-}
-
-function demoFindingText(profile: DataProfile | null): string {
-  const hint = primaryRelationship(profile);
-  if (!hint) return "先从字段画像和关系线索里找值得追问的变量关系。";
-  return `${hint.left} 与 ${hint.right} 呈${hint.direction}，${hint.method}=${hint.score.toFixed(3)}，适合作为演示里的第一条发现。`;
-}
-
-function demoResultText(result: RunModelResponse | null): string {
-  if (!result?.success || !result.results) {
-    return "运行模型后，这里会自动提炼核心系数和显著性。";
-  }
-
-  const primary = mainCoefficient(result.results.coefficients);
-  if (!primary || !hasNumber(primary.coefficient)) {
-    return `模型已运行，有效样本量 ${result.results.sample_size}。`;
-  }
-
-  return `${primary.variable} 为${coefficientDirection(primary.coefficient)}，系数 ${formatNumber(primary.coefficient)}，${significanceText(primary.p_value)}。`;
-}
-
-function buildDemoScript({
-  profile,
-  path,
-  recommendation,
-  runResult
-}: {
-  profile: DataProfile | null;
-  path: ResearchPath | null;
-  recommendation: ModelRecommendation | null;
-  runResult: RunModelResponse | null;
-}): DemoScriptSection[] {
-  const questionText = path?.question ?? DEFAULT_QUESTION;
-  const model = recommendation?.model ?? path?.model ?? DEMO_MODEL_TYPE;
-  const dataText = buildDataSummary(profile) ?? "先加载演示数据，再展示字段画像、缺失情况和变量关系线索";
-  const findingText = demoFindingText(profile);
-  const resultText = demoResultText(runResult);
-  const r2Text = hasNumber(runResult?.results?.r_squared) ? `R2=${formatNumber(runResult?.results?.r_squared)}。` : "";
-  const riskText = path?.risks[0] ?? resultBoundary(model);
-  const nextStepText = path?.nextSteps.slice(0, 2).join("；") || "补充稳健性检验和替代变量设定";
-
-  return [
-    {
-      time: "0:00",
-      title: "开场",
-      text: `各位老师好，我们做的是“小计”，一个面向社科研究生的计量建模工作台。今天用“${questionText}”演示完整流程。`
-    },
-    {
-      time: "0:25",
-      title: "数据",
-      text: `软件先读取数据并生成字段画像。当前演示数据是：${dataText}。这一步不是直接跑回归，而是先让研究者看清数据结构。`
-    },
-    {
-      time: "0:55",
-      title: "发现",
-      text: `${findingText}小计把这类线索整理成可追问的问题，但不会把相关性直接说成因果。`
-    },
-    {
-      time: "1:25",
-      title: "建模",
-      text: `在确认 Y、X、个体列和时间列后，系统推荐 ${modelLabel(model)}。研究者可以在变量配置和检查点里继续干预，而不是全自动黑箱输出。`
-    },
-    {
-      time: "2:00",
-      title: "结果",
-      text: `${resultText}${r2Text ? ` ${r2Text}` : ""}现场重点不是只报一个系数，而是同步解释方向、显著性和可用边界。`
-    },
-    {
-      time: "2:35",
-      title: "收尾",
-      text: `所以这个 Demo 展示的是“人机协作做计量分析”：小计负责整理路径、暴露风险、生成草稿，研究者负责判断假设。下一步会继续做：${nextStepText}。当前需要特别说明：${riskText}`
-    }
-  ];
-}
-
-function buildDefenseCards({
-  profile,
-  path,
-  recommendation,
-  runResult
-}: {
-  profile: DataProfile | null;
-  path: ResearchPath | null;
-  recommendation: ModelRecommendation | null;
-  runResult: RunModelResponse | null;
-}): DefenseCard[] {
-  const model = recommendation?.model ?? path?.model ?? DEMO_MODEL_TYPE;
-  const mainResult = demoResultText(runResult);
-  const risks = profile ? dataQualityRisks(profile) : [];
-  const dataRisk = risks[0] ?? "当前没有看到特别突出的数据质量风险，但正式展示前仍要说明缺失、异常值和样本覆盖。";
-  const boundary = path?.risks[0] ?? resultBoundary(model);
-  const nextStep = path?.nextSteps.slice(0, 2).join("；") || "补充稳健性检验和替代设定";
-
-  return [
-    {
-      title: "因果边界",
-      question: "老师问：这个结果能不能直接解释为因果？",
-      answer: `${boundary} 现场可以先承认边界，再说明下一步会做：${nextStep}。`,
-      prompt: "请帮我把当前结果的因果边界整理成一段答辩口径，要求诚实但不显得项目很弱。"
-    },
-    {
-      title: "数据质量",
-      question: "老师问：这个数据有没有质量问题？",
-      answer: dataRisk,
-      prompt: "请基于当前字段画像，帮我列出最该优先解释的数据质量风险，以及它们对模型结论的影响。"
-    },
-    {
-      title: "人机协作",
-      question: "老师问：为什么不是全自动跑完就行？",
-      answer: "小计把字段画像、关系线索、模型路径、检查点和报告草稿串起来；研究者仍要确认变量、识别假设和结论边界。",
-      prompt: "请帮我解释小计为什么是人机协作工具，而不是全自动替代研究者的流水线。"
-    },
-    {
-      title: "Demo 价值",
-      question: "老师问：这和普通 LLM 写一段 OLS 有什么区别？",
-      answer: `当前演示不是单点写代码，而是从数据结构到 ${modelLabel(model)}、再到结果解释串成流程。${mainResult}`,
-      prompt: "请帮我对比小计和普通 LLM 直接写 OLS 的区别，重点放在数据画像、路径推理、检查点和结果边界。"
-    }
-  ];
-}
-
 function firstExistingColumn(profile: DataProfile, names: string[]): string | null {
   const available = new Set(profile.columns.map((column) => column.name));
   return names.find((name) => available.has(name)) ?? null;
@@ -691,7 +525,7 @@ function buildResearchPath({
   const model = modelFromPath(modelType, recommendation, entity, time);
 
   return {
-    question: question.trim() || DEFAULT_QUESTION,
+    question: question.trim() || "尚未填写研究问题",
     questionCandidates: questionCandidates(profile, outcome, coreVariables),
     structure: structureSummary(profile, entity, time),
     outcome,
@@ -727,7 +561,7 @@ function buildCollaborationCheckpoints({
     id: "question",
     target: "question",
     title: "研究问题",
-    detail: hasQuestion ? question.trim() : "先把问题写成“X 是否影响 Y”的形式。",
+    detail: hasQuestion ? question.trim() : "先把问题写成「X 是否影响 Y」的形式。",
     badge: hasQuestion ? "待确认" : "待填写"
   });
 
@@ -799,7 +633,7 @@ function buildReportNotes({
   }
 
   if (path) {
-    lines.push(`- 研究路径：当前主线为“${path.question}”，建议下一步关注：${path.nextSteps.slice(0, 3).join("；")}。`);
+    lines.push(`- 研究路径：当前主线为"${path.question}"，建议下一步关注：${path.nextSteps.slice(0, 3).join("；")}。`);
     if (path.risks.length) {
       lines.push(`- 风险边界：${path.risks.slice(0, 3).join("；")}。`);
     }
@@ -896,25 +730,6 @@ function buildDemoRequest(sampleProfile: DataProfile): ModelRequest {
     instrument_variable: null,
     llm_config: { enabled: false }
   };
-}
-
-function demoStageLabel(stage: DemoStage): string {
-  if (stage === "ready") return "已准备好";
-  if (stage === "error") return "需要重试";
-  if (stage === "idle") return "待开始";
-  return "准备中";
-}
-
-function demoStepState(stage: DemoStage, step: DemoStage): "pending" | "active" | "done" | "error" {
-  if (stage === "ready") return "done";
-  if (stage === "error") return "error";
-  if (stage === "idle") return "pending";
-
-  const currentIndex = DEMO_FLOW_STEPS.findIndex((item) => item.stage === stage);
-  const stepIndex = DEMO_FLOW_STEPS.findIndex((item) => item.stage === step);
-  if (stepIndex < currentIndex) return "done";
-  if (stepIndex === currentIndex) return "active";
-  return "pending";
 }
 
 function missingModelSettings(settings: ModelSettings): string[] {
@@ -1287,7 +1102,10 @@ export default function App() {
   const [status, setStatus] = useState("就绪");
   const [busy, setBusy] = useState<BusyKey | null>(null);
   const [demoStage, setDemoStage] = useState<DemoStage>("idle");
-  const [activeView, setActiveView] = useState<WorkbenchView>("workflow");
+  const [activeStep, setActiveStep] = useState<number>(1);
+  const [showReportPage, setShowReportPage] = useState(false);
+  const [showGuideDrawer, setShowGuideDrawer] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
@@ -1307,7 +1125,7 @@ export default function App() {
   const independentInputRef = useRef<HTMLInputElement | null>(null);
   const chatInputRef = useRef<HTMLInputElement | null>(null);
 
-  const columns = useMemo(() => splitList(columnsInput.trim() ? columnsInput : DEFAULT_COLUMNS), [columnsInput]);
+  const columns = useMemo(() => splitList(columnsInput), [columnsInput]);
   const llmConfig = useMemo(() => toLLMConfig(modelSettings), [modelSettings]);
   const currentChat = useMemo(
     () => chatState.sessions.find((session) => session.id === chatState.activeId) ?? chatState.sessions[0],
@@ -1321,7 +1139,7 @@ export default function App() {
     "--main-rail-min": `${MIN_MAIN_RAIL}px`,
     "--right-rail-min": `${MIN_RIGHT_RAIL}px`
   } as CSSProperties;
-  const workspaceClassName = activeView === "workflow" ? "workspace" : "workspace workspace-focused";
+  const workspaceClassName = showReportPage ? "workspace workspace-focused" : "workspace";
   const isWorking = busy !== null;
   const filteredChatSessions = useMemo(() => {
     const keyword = chatSearch.trim().toLowerCase();
@@ -1360,6 +1178,18 @@ export default function App() {
     [dependentVariable, independentVariables, profile, question, recommendation, researchPath]
   );
 
+  const contextSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (profile) parts.push(`已加载字段画像(${profile.columns?.length ?? 0}列)`);
+    if (question.trim()) parts.push("已填写研究问题");
+    if (dependentVariable) parts.push(`Y=${dependentVariable}`);
+    if (independentVariables) parts.push(`X=${independentVariables}`);
+    if (recommendation) parts.push("已生成模型推荐");
+    if (runResult) parts.push("已有模型结果");
+    if (report.trim()) parts.push("已有报告草稿");
+    return parts.length > 0 ? `当前上下文：${parts.join("，")}` : "";
+  }, [profile, question, dependentVariable, independentVariables, recommendation, runResult, report]);
+
   function workspaceRailSpace() {
     const node = workspaceRef.current;
     if (!node) return 0;
@@ -1395,13 +1225,12 @@ export default function App() {
     } as CSSProperties;
   }
 
-  function showView(view: WorkbenchView) {
-    setActiveView(view);
-    if (view === "workflow") setStatus("已回到工作台。");
-    if (view === "profile") setStatus(profile ? "正在查看字段画像。" : "先选择数据并生成字段画像。");
-    if (view === "path") setStatus(researchPath ? "正在查看研究路径。" : "先生成字段画像和变量配置。");
-    if (view === "report") setStatus(report.trim() ? "正在查看分析报告。" : "可以在这里生成分析报告。");
-    if (view === "guide") setStatus("正在查看使用文档。");
+  function showStep(step: number) {
+    setActiveStep(step);
+    if (step === 1) setStatus(profile ? "正在查看数据与字段画像。" : "先选择数据并生成字段画像。");
+    if (step === 2) setStatus("请确认变量设定和模型推荐。");
+    if (step === 3) setStatus(recommendation ? "请确认模型路径并运行。" : "先生成模型推荐。");
+    if (step === 4) setStatus(report.trim() ? "报告已生成，可查看或导出。" : "点击生成报告查看分析结果。");
   }
 
   function startPanelResize(rail: RailId, panelId: PanelId, event: ReactPointerEvent<HTMLDivElement>) {
@@ -1427,7 +1256,9 @@ export default function App() {
   }
 
   function resetWorkspaceLayout() {
-    setActiveView("workflow");
+    setActiveStep(1);
+    setShowReportPage(false);
+    setShowGuideDrawer(false);
     setRailWidths(fitRailWidths(DEMO_RAIL_WIDTHS, workspaceRailSpace()));
     setPanelHeights({
       left: { ...DEMO_PANEL_HEIGHTS.left },
@@ -1563,17 +1394,16 @@ export default function App() {
   }, [chatHistoryOpen]);
 
   useEffect(() => {
-    window.workbench?.onOpenModelSettings?.(() => {
+    return window.workbench?.onOpenModelSettings?.(() => {
       setSettingsDraft(loadModelSettings());
       setSettingsOpen(true);
     });
   }, []);
 
   useEffect(() => {
-    window.workbench?.onDataFileSelected?.((payload) => {
+    return window.workbench?.onDataFileSelected?.((payload) => {
       const next = new File([payload.data], payload.name, { type: dataFileType(payload.name) });
-      setFile(next);
-      setRunNotice(null);
+      setSelectedFile(next);
       setStatus(`已选择 ${payload.name}`);
     });
   }, []);
@@ -1602,13 +1432,13 @@ export default function App() {
     return {
       research_question: researchQuestion,
       columns,
-      dependent_variable: dependentVariable.trim() || DEFAULT_DEPENDENT_VARIABLE,
-      independent_variables: splitList(independentVariables.trim() ? independentVariables : DEFAULT_INDEPENDENT_VARIABLES),
-      entity_column: entityColumn || null,
-      time_column: timeColumn || null,
-      treatment_column: treatmentColumn || null,
-      running_variable: runningVariable || null,
-      instrument_variable: instrumentVariable || null,
+      dependent_variable: dependentVariable.trim() || null,
+      independent_variables: splitList(independentVariables),
+      entity_column: entityColumn.trim() || null,
+      time_column: timeColumn.trim() || null,
+      treatment_column: treatmentColumn.trim() || null,
+      running_variable: runningVariable.trim() || null,
+      instrument_variable: instrumentVariable.trim() || null,
       llm_config: llmConfig
     };
   }
@@ -1647,11 +1477,62 @@ export default function App() {
     return columns.map((name) => ({ name }));
   }
 
+  function resetAnalysisForNewFile() {
+    setProfile(null);
+    setColumnsInput("");
+    setDependentVariable("");
+    setIndependentVariables("");
+    setEntityColumn("");
+    setTimeColumn("");
+    setTreatmentColumn("");
+    setRunningVariable("");
+    setInstrumentVariable("");
+    setInference(null);
+    setRecommendation(null);
+    setRecommendationNotice(null);
+    setModelType("OLS");
+    setRunResult(null);
+    setRunNotice(null);
+    setReport("");
+    setDemoStage("idle");
+    setActiveStep(1);
+    setShowReportPage(false);
+    setConfirmedCheckpoints([]);
+  }
+
+  function setSelectedFile(next: File | null) {
+    setFile(next);
+    resetAnalysisForNewFile();
+  }
+
+  function requireColumns() {
+    if (columns.length > 0) return true;
+    const message = "请先选择数据文件并生成字段画像，或手动填写字段列表。";
+    setStatus(message);
+    return false;
+  }
+
+  function requireRunVariables() {
+    const y = dependentVariable.trim();
+    const xs = splitList(independentVariables);
+
+    if (y && xs.length > 0) return true;
+
+    const message = !y && xs.length === 0
+      ? "请先填写被解释变量 Y 和解释变量 X。"
+      : !y
+        ? "请先填写被解释变量 Y。"
+        : "请先填写至少一个解释变量 X。";
+
+    setActiveStep(2);
+    setRunNotice(message);
+    setStatus(message);
+    return false;
+  }
+
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const next = event.target.files?.[0] ?? null;
-    setFile(next);
-    setRunNotice(null);
-    setDemoStage("idle");
+    setSelectedFile(next);
     setStatus(next ? `已选择 ${next.name}` : "就绪");
   }
 
@@ -1662,7 +1543,7 @@ export default function App() {
   }
 
   function useCandidateQuestion(questionText: string) {
-    setActiveView("workflow");
+    setActiveStep(2);
     updateQuestion(questionText);
     setStatus("已采用候选研究问题。");
     window.setTimeout(() => questionInputRef.current?.focus(), 0);
@@ -1676,25 +1557,25 @@ export default function App() {
 
   function focusCheckpointTarget(target: CheckpointTarget) {
     if (target === "question") {
-      setActiveView("workflow");
+      setActiveStep(1);
       window.setTimeout(() => questionInputRef.current?.focus(), 0);
       setStatus("请确认研究问题。");
       return;
     }
 
     if (target === "data") {
-      setActiveView("workflow");
+      setActiveStep(1);
       if (!file) {
-        setStatus("先选择数据文件，或点击演示准备内置数据。");
+        setStatus("先选择数据文件，或点击示例准备内置数据。");
         return;
       }
       window.setTimeout(() => columnsInputRef.current?.focus(), 0);
-      setStatus(profile ? "字段画像已生成，可以继续确认数据结构。" : "点击“生成字段画像”查看数据结构。");
+      setStatus(profile ? "字段画像已生成，可以继续确认数据结构。" : "点击「生成字段画像」查看数据结构。");
       return;
     }
 
     if (target === "variables") {
-      setActiveView("workflow");
+      setActiveStep(2);
       window.setTimeout(() => {
         const targetInput = dependentVariable.trim() ? independentInputRef.current : dependentInputRef.current;
         targetInput?.focus();
@@ -1704,13 +1585,13 @@ export default function App() {
     }
 
     if (target === "recommendation") {
-      setActiveView("workflow");
-      setStatus(recommendation ? "请检查模型推荐和识别策略。" : "点击“推荐模型”生成识别策略建议。");
+      setActiveStep(3);
+      setStatus(recommendation ? "请检查模型推荐和识别策略。" : "点击「推荐模型」生成识别策略建议。");
       return;
     }
 
-    setActiveView("path");
-    setStatus("请确认风险边界，必要时回到变量配置或继续追问小计。");
+    setActiveStep(3);
+    setStatus("请确认风险边界，必要时回到变量配置或继续向小计提问。");
   }
 
   async function loadProfile() {
@@ -1723,7 +1604,7 @@ export default function App() {
       const next = await profileData(file);
       setProfile(next);
       setColumnsInput(next.columns.map((column) => column.name).join(", "));
-      setActiveView("profile");
+      setActiveStep(1);
       setStatus("字段画像已生成。");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "字段画像生成失败。");
@@ -1756,7 +1637,7 @@ export default function App() {
 
   async function loadDemoScenario() {
     setBusy("demo");
-    setActiveView("workflow");
+    setActiveStep(1);
     setDemoStage("data");
     try {
       const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
@@ -1765,14 +1646,14 @@ export default function App() {
       const request = buildDemoRequest(sampleProfile);
 
       setDemoStage("recommend");
-      setStatus("正在准备演示：生成模型推荐。");
+      setStatus("正在准备示例：生成模型推荐。");
       const nextRecommendation = await recommendModel(request);
       const nextModel = nextRecommendation.model || DEMO_MODEL_TYPE;
       setRecommendation(nextRecommendation);
       setModelType(nextModel);
 
       setDemoStage("run");
-      setStatus("正在准备演示：运行模型。");
+      setStatus("正在准备示例：运行模型。");
       const nextRunResult = await runModel(sampleFile, request, nextModel);
       setRunResult(nextRunResult);
       setRunNotice(nextRunResult.success ? null : nextRunResult.error ?? "模型运行失败。");
@@ -1798,15 +1679,15 @@ export default function App() {
       });
 
       setDemoStage("report");
-      setStatus("正在准备演示：生成报告。");
+      setStatus("正在准备示例：生成报告。");
       const nextReport = await generateReport(DEFAULT_QUESTION, nextModel, nextRunResult.results, notes, { enabled: false });
       setReport(nextReport.markdown);
       setConfirmedCheckpoints(["question", "data", "variables", "recommendation"]);
       setDemoStage("ready");
-      setStatus("演示已准备好：数据、推荐、结果和报告都已生成。");
+      setStatus("示例已准备好：数据、推荐、结果和报告都已生成。");
     } catch (error) {
       setDemoStage("error");
-      setStatus(error instanceof Error ? error.message : "演示场景加载失败。");
+      setStatus(error instanceof Error ? error.message : "示例数据加载失败。");
     } finally {
       setBusy(null);
     }
@@ -1815,6 +1696,7 @@ export default function App() {
   async function infer() {
     const researchQuestion = requireResearchQuestion();
     if (!researchQuestion) return;
+    if (!requireColumns()) return;
 
     setBusy("infer");
     try {
@@ -1838,6 +1720,10 @@ export default function App() {
       setRecommendationNotice("请先填写研究问题，再生成模型推荐。");
       return;
     }
+    if (!requireColumns()) {
+      setRecommendationNotice("请先补全字段列表，再生成模型推荐。");
+      return;
+    }
 
     setBusy("recommend");
     setRecommendationNotice(null);
@@ -1857,7 +1743,7 @@ export default function App() {
 
   async function run() {
     if (!file) {
-      const message = "请先选择数据文件，或点击演示准备内置数据。";
+      const message = "请先选择数据文件，或点击示例准备内置数据。";
       setRunNotice(message);
       setStatus(message);
       return;
@@ -1867,6 +1753,7 @@ export default function App() {
       setRunNotice("请先填写研究问题，再运行模型。");
       return;
     }
+    if (!requireRunVariables()) return;
 
     setBusy("run");
     setRunNotice(null);
@@ -1926,14 +1813,6 @@ export default function App() {
     setStatus("已打开历史会话。");
   }
 
-  function prepareReviewQuestion(questionText: string) {
-    setActiveView("workflow");
-    setChatInput(questionText);
-    setChatHistoryOpen(false);
-    setStatus("已放入评审追问，确认后可以发送给小计。");
-    window.setTimeout(() => chatInputRef.current?.focus(), 0);
-  }
-
   async function sendChat() {
     const message = chatInput.trim();
     if (!message || !currentChat) return;
@@ -1990,7 +1869,8 @@ export default function App() {
       });
       const response = await generateReport(researchQuestion, modelType, runResult?.results ?? null, notes, llmConfig);
       setReport(response.markdown);
-      setActiveView("report");
+      setShowReportPage(true);
+      setActiveStep(4);
       setStatus("报告已生成。");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "报告生成失败。");
@@ -2081,48 +1961,6 @@ export default function App() {
             <p className="eyebrow">计量建模小计</p>
             <h1>研究工作台</h1>
           </div>
-          <nav className="view-switch" aria-label="工作区视图">
-            <button
-              className={`view-switch-button ${activeView === "workflow" ? "active" : ""}`}
-              type="button"
-              onClick={() => showView("workflow")}
-            >
-              <Database size={15} />
-              <span>工作台</span>
-            </button>
-            <button
-              className={`view-switch-button ${activeView === "profile" ? "active" : ""}`}
-              type="button"
-              onClick={() => showView("profile")}
-            >
-              <TableProperties size={15} />
-              <span>字段画像</span>
-            </button>
-            <button
-              className={`view-switch-button ${activeView === "path" ? "active" : ""}`}
-              type="button"
-              onClick={() => showView("path")}
-            >
-              <Sparkles size={15} />
-              <span>研究路径</span>
-            </button>
-            <button
-              className={`view-switch-button ${activeView === "report" ? "active" : ""}`}
-              type="button"
-              onClick={() => showView("report")}
-            >
-              <FileText size={15} />
-              <span>分析报告</span>
-            </button>
-            <button
-              className={`view-switch-button ${activeView === "guide" ? "active" : ""}`}
-              type="button"
-              onClick={() => showView("guide")}
-            >
-              <BookOpen size={15} />
-              <span>使用文档</span>
-            </button>
-          </nav>
         </div>
         <div className="topbar-actions">
           <div className="status-strip">
@@ -2141,6 +1979,15 @@ export default function App() {
           >
             <RotateCcw size={16} />
             <span>重置布局</span>
+          </button>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => setShowGuideDrawer(true)}
+            title="使用文档"
+            aria-label="使用文档"
+          >
+            <BookOpen size={18} />
           </button>
           <button
             className={`icon-button settings-button ${modelSettings.enabled ? "settings-active" : ""}`}
@@ -2165,304 +2012,454 @@ export default function App() {
       ) : null}
 
       <section className={workspaceClassName} ref={workspaceRef} style={workspaceStyle}>
-        {activeView === "workflow" ? (
-          <>
-        <aside className="rail rail-left">
-          <Panel title="数据" icon={<Database size={17} />} style={panelStyle("left", "data")}>
-            <div className="file-row">
-              <label className="file-button" title="选择数据文件">
-                <FileUp size={16} />
-                <span>选择</span>
-                <input type="file" accept=".csv,.xlsx,.xls" onChange={onFileChange} />
-              </label>
-              <button type="button" onClick={loadDemoScenario} disabled={isWorking} title="一键准备路演场景">
-                <Sparkles size={16} />
-                <span>{busy === "demo" ? "准备中" : "演示"}</span>
+        {showReportPage ? (
+          <div className="report-page">
+            <div className="report-page-topbar">
+              <button className="secondary" type="button" onClick={() => setShowReportPage(false)} title="返回工作台">
+                <ArrowLeft size={16} />
+                <span>返回工作台</span>
               </button>
-            </div>
-            <div className="filename">{file?.name ?? "尚未选择文件"}</div>
-            <DemoScenarioBrief profile={profile} stage={demoStage} onAsk={prepareReviewQuestion} />
-            <DataQualityBrief profile={profile} onAsk={prepareReviewQuestion} />
-            <DemoFlow stage={demoStage} />
-            <DemoBrief
-              profile={profile}
-              path={researchPath}
-              recommendation={recommendation}
-              runResult={runResult}
-              stage={demoStage}
-              onAsk={prepareReviewQuestion}
-            />
-            <DemoScript
-              profile={profile}
-              path={researchPath}
-              recommendation={recommendation}
-              runResult={runResult}
-              stage={demoStage}
-            />
-            <button className="wide" type="button" onClick={loadProfile} disabled={!file || isWorking}>
-              <RefreshCw size={16} />
-              <span>生成字段画像</span>
-            </button>
-          </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "left:data"}
-            label="调整数据板块高度"
-            onPointerDown={(event) => startPanelResize("left", "data", event)}
-            onDoubleClick={() => resetPanelRail("left")}
-          />
-
-          <Panel title="变量配置" icon={<Wand2 size={17} />} className="variables-panel">
-            <div className="two-buttons">
-              <button type="button" onClick={infer} disabled={isWorking}>
-                <Sparkles size={16} />
-                <span>识别变量</span>
-              </button>
-              <button type="button" onClick={recommend} disabled={isWorking}>
-                <Cpu size={16} />
-                <span>推荐模型</span>
-              </button>
-            </div>
-            <label>被解释变量 Y</label>
-            <input
-              ref={dependentInputRef}
-              className="dependent-input"
-              value={dependentVariable}
-              placeholder={DEPENDENT_VARIABLE_PLACEHOLDER}
-              onChange={(event) => setDependentVariable(event.target.value)}
-            />
-            <label>解释变量 X</label>
-            <input
-              ref={independentInputRef}
-              className="independent-input"
-              value={independentVariables}
-              placeholder={INDEPENDENT_VARIABLES_PLACEHOLDER}
-              onChange={(event) => setIndependentVariables(event.target.value)}
-            />
-            <div className="mini-grid">
-              <Input label="个体列" value={entityColumn} onChange={setEntityColumn} />
-              <Input label="时间列" value={timeColumn} onChange={setTimeColumn} />
-              <Input label="处理列" value={treatmentColumn} onChange={setTreatmentColumn} />
-              <Input label="断点变量" value={runningVariable} onChange={setRunningVariable} />
-              <Input label="工具变量" value={instrumentVariable} onChange={setInstrumentVariable} />
-            </div>
-          </Panel>
-        </aside>
-
-        <ColumnResizeHandle
-          active={resizeEdge === "left"}
-          label="拖动调整左侧宽度"
-          onPointerDown={(event) => startColumnResize("left", event)}
-        />
-
-        <section className="rail rail-main">
-          <Panel title="研究问题" icon={<MessageSquare size={17} />} style={panelStyle("main", "question")}>
-            <textarea
-              ref={questionInputRef}
-              className="question-input"
-              value={question}
-              placeholder={QUESTION_PLACEHOLDER}
-              onChange={(event) => updateQuestion(event.target.value)}
-              rows={4}
-            />
-            <label>字段列表</label>
-            <input
-              ref={columnsInputRef}
-              className="columns-input"
-              value={columnsInput}
-              placeholder={COLUMNS_PLACEHOLDER}
-              onChange={(event) => setColumnsInput(event.target.value)}
-            />
-          </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "main:question"}
-            label="调整研究问题板块高度"
-            onPointerDown={(event) => startPanelResize("main", "question", event)}
-            onDoubleClick={() => resetPanelRail("main")}
-          />
-
-          <Panel title="模型推荐" icon={<Cpu size={17} />} style={panelStyle("main", "recommendation")}>
-            <div className="runbar">
-              <select value={modelType} onChange={(event) => setModelType(event.target.value)}>
-                {MODEL_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>{item.label}</option>
-                ))}
-              </select>
-              <button type="button" onClick={run} disabled={isWorking}>
-                <Play size={16} />
-                <span>运行模型</span>
-              </button>
-            </div>
-            <RecommendationView recommendation={recommendation} notice={recommendationNotice} />
-          </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "main:recommendation"}
-            label="调整模型推荐板块高度"
-            onPointerDown={(event) => startPanelResize("main", "recommendation", event)}
-            onDoubleClick={() => resetPanelRail("main")}
-          />
-
-          <Panel title="模型结果" icon={<Activity size={17} />} style={panelStyle("main", "result")}>
-            <RunResultView result={runResult} notice={runNotice} />
-          </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "main:result"}
-            label="调整模型结果板块高度"
-            onPointerDown={(event) => startPanelResize("main", "result", event)}
-            onDoubleClick={() => resetPanelRail("main")}
-          />
-        </section>
-
-        <ColumnResizeHandle
-          active={resizeEdge === "right"}
-          label="拖动调整右侧宽度"
-          onPointerDown={(event) => startColumnResize("right", event)}
-        />
-
-        <aside className="rail rail-right">
-          <Panel title="小计回答" icon={<MessageSquare size={17} />} className="chat-panel" style={panelStyle("right", "chat")}>
-            <div className="chat-tools">
-              <button className="secondary chat-new-button" type="button" onClick={newChat} title="新建会话">
-                <Plus size={15} />
-                <span>新会话</span>
-              </button>
-              <div className="chat-history-wrap" ref={chatHistoryRef}>
-                <button
-                  className={`secondary chat-history-button ${chatHistoryOpen ? "chat-history-open" : ""}`}
-                  type="button"
-                  onClick={() => setChatHistoryOpen((open) => !open)}
-                  title="查看历史对话"
-                >
-                  <Search size={15} />
-                  <span>历史对话</span>
-                  <ChevronDown size={14} />
+              <h2>分析报告</h2>
+              <div className="report-actions">
+                <button type="button" onClick={makeReport} disabled={isWorking}>
+                  <RefreshCw size={16} />
+                  <span>生成/刷新报告</span>
                 </button>
-                {chatHistoryOpen ? (
-                  <div className="chat-history-popover">
-                    <label className="chat-search-field" title="查找历史对话">
-                      <Search size={15} />
-                      <input
-                        value={chatSearch}
-                        placeholder="搜索历史对话"
-                        onChange={(event) => setChatSearch(event.target.value)}
-                      />
-                    </label>
-                    {filteredChatSessions.length > 0 ? (
-                      <div className="chat-session-list">
-                        {filteredChatSessions.map((session) => (
-                          <button
-                            className={`chat-session ${session.id === currentChat?.id ? "chat-session-active" : ""}`}
-                            type="button"
-                            key={session.id}
-                            onClick={() => openChat(session.id)}
-                            title={session.title}
-                          >
-                            <strong>{session.title}</strong>
-                            <span>{formatChatTime(session.updatedAt)} · {chatPreview(session)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="chat-session-empty">没有找到相关历史。</div>
-                    )}
-                  </div>
-                ) : null}
+                <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
+                  <Download size={16} />
+                  <span>导出 MD</span>
+                </button>
+                <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
+                  <Download size={16} />
+                  <span>导出 PDF</span>
+                </button>
               </div>
             </div>
-
-            <div className="chat-log" ref={chatLogRef}>
-              {chatHistory.length === 0 ? <div className="empty">还没有对话。</div> : null}
-              {chatHistory.map((item, index) => (
-                <div className={`chat-item chat-${item.role}`} key={`${item.role}-${index}`}>
-                  <strong>{item.role === "user" ? "我" : "小计"}</strong>
-                  <ChatMessageBody message={item} />
-                </div>
-              ))}
-              {busy === "chat" && pendingChatId === currentChat?.id ? <ThinkingMessage /> : null}
-            </div>
-            <div className="send-row">
-              <input
-                ref={chatInputRef}
-                className="chat-input"
-                value={chatInput}
-                placeholder={CHAT_PLACEHOLDER}
-                onChange={(event) => setChatInput(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && sendChat()}
-              />
-              <button type="button" onClick={sendChat} disabled={busy === "chat"} title="发送">
-                <Send size={16} />
-              </button>
-            </div>
-          </Panel>
-          <PanelResizeHandle
-            active={panelResizeKey === "right:chat"}
-            label="调整小计回答高度"
-            onPointerDown={(event) => startPanelResize("right", "chat", event)}
-            onDoubleClick={() => resetPanelRail("right")}
-          />
-        </aside>
-          </>
-        ) : (
-          <div className="focus-view">
-            {activeView === "profile" ? (
-              <Panel title="字段画像" icon={<TableProperties size={17} />} className="focus-panel">
-                <ProfileTable profile={profile} />
-              </Panel>
-            ) : null}
-
-            {activeView === "path" ? (
-              <Panel title="研究路径" icon={<Sparkles size={17} />} className="focus-panel">
-                <ResearchPathView
-                  path={researchPath}
-                  onUseQuestion={useCandidateQuestion}
-                  onAskQuestion={prepareReviewQuestion}
-                />
-                <CollaborationCheckpoints
-                  checkpoints={collaborationCheckpoints}
-                  confirmedIds={confirmedCheckpoints}
-                  onToggle={toggleCheckpoint}
-                  onFocus={focusCheckpointTarget}
-                />
-                <DefenseCardsView
-                  profile={profile}
-                  path={researchPath}
-                  recommendation={recommendation}
-                  runResult={runResult}
-                  onAsk={prepareReviewQuestion}
-                />
-              </Panel>
-            ) : null}
-
-            {activeView === "report" ? (
-              <Panel title="分析报告" icon={<FileText size={17} />} className="report-panel focus-panel">
-                <div className="report-actions">
-                  <button type="button" onClick={makeReport} disabled={isWorking}>
-                    <FileText size={16} />
-                    <span>生成报告</span>
-                  </button>
-                  <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
-                    <Download size={16} />
-                    <span>导出 MD</span>
-                  </button>
-                  <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
-                    <Download size={16} />
-                    <span>导出 PDF</span>
-                  </button>
-                </div>
+            <div className="report-page-body">
+              <aside className="report-outline">
+                <h3>报告目录</h3>
+                {report.trim() ? (
+                  <nav>
+                    {report.split("\n").filter((line) => /^#{1,4}\s/.test(line)).map((line, i) => {
+                      const level = line.match(/^(#{1,4})\s/)?.[1]?.length ?? 1;
+                      return (
+                        <a key={i} style={{ paddingLeft: (level - 1) * 12 }}>
+                          <span>{i + 1}</span>
+                          {line.replace(/^#{1,4}\s/, "")}
+                        </a>
+                      );
+                    })}
+                  </nav>
+                ) : (
+                  <div className="report-outline-empty">尚未生成报告。</div>
+                )}
+              </aside>
+              <section className="report-preview-pane">
                 {report.trim() ? (
                   <MarkdownBody value={report} className="report report-rendered chat-markdown" />
                 ) : (
-                  <div className="report report-empty">尚未生成报告。</div>
+                  <div className="report report-empty">尚未生成报告。点击上方"生成/刷新报告"开始。</div>
                 )}
-              </Panel>
-            ) : null}
-
-            {activeView === "guide" ? (
-              <Panel title="使用文档" icon={<BookOpen size={17} />} className="guide-panel focus-panel">
-                <UserGuideView />
-              </Panel>
-            ) : null}
+              </section>
+              <aside className="report-ai-tools">
+                <h3>AI 辅助润色</h3>
+                {report.trim() ? (
+                  <>
+                    <p className="report-ai-head">选择报告段落后，可以在这里让 AI 帮你润色表达、调整结构或补充说明。</p>
+                    <button className="secondary wide" type="button" onClick={() => { setShowReportPage(false); setShowChat(true); }} disabled={isWorking}>
+                      <MessageSquare size={16} />
+                      <span>打开小计对话润色</span>
+                    </button>
+                  </>
+                ) : (
+                  <p className="report-ai-head">生成报告后可以使用 AI 辅助润色。</p>
+                )}
+              </aside>
+            </div>
           </div>
+        ) : (
+          <>
+            <aside className="rail rail-left">
+              <Panel title="数据" icon={<Database size={17} />} style={panelStyle("left", "data")}>
+                <div className="file-row">
+                  <label className="file-button" title="选择数据文件">
+                    <FileUp size={16} />
+                    <span>选择</span>
+                    <input type="file" accept=".csv,.xlsx,.xls" onChange={onFileChange} />
+                  </label>
+                  <button type="button" onClick={loadDemoScenario} disabled={isWorking} title="一键加载示例数据">
+                    <Sparkles size={16} />
+                    <span>{busy === "demo" ? "准备中" : "示例"}</span>
+                  </button>
+                </div>
+                <div className="filename">{file?.name ?? "尚未选择文件"}</div>
+                <DemoScenarioBrief profile={profile} stage={demoStage} />
+                <DataQualityBrief profile={profile} />
+                <button className="wide" type="button" onClick={loadProfile} disabled={!file || isWorking}>
+                  <RefreshCw size={16} />
+                  <span>生成字段画像</span>
+                </button>
+              </Panel>
+              <PanelResizeHandle
+                active={panelResizeKey === "left:data"}
+                label="调整数据板块高度"
+                onPointerDown={(event) => startPanelResize("left", "data", event)}
+                onDoubleClick={() => resetPanelRail("left")}
+              />
+            </aside>
+
+            <ColumnResizeHandle
+              active={resizeEdge === "left"}
+              label="拖动调整左侧宽度"
+              onPointerDown={(event) => startColumnResize("left", event)}
+            />
+
+            <section className="rail rail-main">
+              <div className="flow-overview">
+                <div className="flow-overview-head">
+                  <h2>分析流程</h2>
+                  <span className="note">
+                    {activeStep === 1 ? "下一步：确认变量" : activeStep === 2 ? "下一步：形成模型路径" : activeStep === 3 ? "下一步：解释结果" : "分析完成"}
+                  </span>
+                </div>
+                <div className="flow-step-grid">
+                  <button
+                    className={`flow-step ${activeStep === 1 ? "flow-step-active" : ""} ${profile ? "flow-step-done" : ""}`}
+                    type="button"
+                    onClick={() => showStep(1)}
+                  >
+                    <span className="flow-step-index">1</span>
+                    <div className="flow-step-copy">
+                      <span className="flow-step-title"><strong>读取数据</strong></span>
+                      <span>选择 CSV 或 Excel 后生成画像</span>
+                    </div>
+                  </button>
+                  <button
+                    className={`flow-step ${activeStep === 2 ? "flow-step-active" : ""} ${dependentVariable || independentVariables ? "flow-step-done" : ""}`}
+                    type="button"
+                    onClick={() => showStep(2)}
+                  >
+                    <span className="flow-step-index">2</span>
+                    <div className="flow-step-copy">
+                      <span className="flow-step-title"><strong>确认变量</strong></span>
+                      <span>识别或手动填写 Y / X</span>
+                    </div>
+                  </button>
+                  <button
+                    className={`flow-step ${activeStep === 3 ? "flow-step-active" : ""} ${recommendation ? "flow-step-done" : ""}`}
+                    type="button"
+                    onClick={() => showStep(3)}
+                  >
+                    <span className="flow-step-index">3</span>
+                    <div className="flow-step-copy">
+                      <span className="flow-step-title"><strong>形成模型路径</strong></span>
+                      <span>结合研究问题推荐模型</span>
+                    </div>
+                  </button>
+                  <button
+                    className={`flow-step ${activeStep === 4 ? "flow-step-active" : ""} ${runResult ? "flow-step-done" : ""}`}
+                    type="button"
+                    onClick={() => showStep(4)}
+                  >
+                    <span className="flow-step-index">4</span>
+                    <div className="flow-step-copy">
+                      <span className="flow-step-title"><strong>解释结果</strong></span>
+                      <span>查看系数、显著性和边界</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div className="dynamic-panel">
+                {activeStep === 1 ? (
+                  <div className="dynamic-stack">
+                    <Panel title="研究问题" icon={<MessageSquare size={17} />} style={panelStyle("main", "question")}>
+                      <textarea
+                        ref={questionInputRef}
+                        className="question-input"
+                        value={question}
+                        placeholder={QUESTION_PLACEHOLDER}
+                        onChange={(event) => updateQuestion(event.target.value)}
+                        rows={4}
+                      />
+                      <label>字段列表</label>
+                      <input
+                        ref={columnsInputRef}
+                        className="columns-input"
+                        value={columnsInput}
+                        placeholder={COLUMNS_PLACEHOLDER}
+                        onChange={(event) => setColumnsInput(event.target.value)}
+                      />
+                    </Panel>
+                    {profile ? (
+                      <>
+                        <Panel title="字段画像" icon={<TableProperties size={17} />}>
+                          <RelationshipMap hints={profile.diagnostics?.relationship_hints?.slice(0, 8) ?? []} />
+                          <ProfileTable profile={profile} />
+                        </Panel>
+                      </>
+                    ) : (
+                      <div className="profile-empty-state">
+                        <TableProperties size={32} />
+                        <p>尚未生成字段画像</p>
+                        <span>选择数据文件后点击左侧"生成字段画像"按钮</span>
+                      </div>
+                    )}
+                  </div>
+                ) : activeStep === 2 ? (
+                  <div className="dynamic-stack">
+                    <Panel title="变量配置" icon={<Wand2 size={17} />}>
+                      <div className="inline-variable-form">
+                        <div className="two-buttons">
+                          <button type="button" onClick={infer} disabled={isWorking}>
+                            <Sparkles size={16} />
+                            <span>识别变量</span>
+                          </button>
+                          <button type="button" onClick={recommend} disabled={isWorking}>
+                            <Cpu size={16} />
+                            <span>推荐模型</span>
+                          </button>
+                        </div>
+                        <label>被解释变量 Y</label>
+                        <input
+                          ref={dependentInputRef}
+                          className="dependent-input"
+                          value={dependentVariable}
+                          placeholder={DEPENDENT_VARIABLE_PLACEHOLDER}
+                          onChange={(event) => setDependentVariable(event.target.value)}
+                        />
+                        <label>解释变量 X</label>
+                        <input
+                          ref={independentInputRef}
+                          className="independent-input"
+                          value={independentVariables}
+                          placeholder={INDEPENDENT_VARIABLES_PLACEHOLDER}
+                          onChange={(event) => setIndependentVariables(event.target.value)}
+                        />
+                        <div className="mini-grid">
+                          <Input label="个体列" value={entityColumn} onChange={setEntityColumn} />
+                          <Input label="时间列" value={timeColumn} onChange={setTimeColumn} />
+                          <Input label="处理列" value={treatmentColumn} onChange={setTreatmentColumn} />
+                          <Input label="断点变量" value={runningVariable} onChange={setRunningVariable} />
+                          <Input label="工具变量" value={instrumentVariable} onChange={setInstrumentVariable} />
+                        </div>
+                      </div>
+                    </Panel>
+                    {profile ? (
+                      <Panel title="字段画像" icon={<TableProperties size={17} />}>
+                        <ProfileTable profile={profile} />
+                      </Panel>
+                    ) : null}
+                  </div>
+                ) : activeStep === 3 ? (
+                  <div className="dynamic-stack">
+                    <Panel title="模型推荐" icon={<Cpu size={17} />} style={panelStyle("main", "recommendation")}>
+                      <div className="model-command-bar">
+                        <select value={modelType} onChange={(event) => setModelType(event.target.value)}>
+                          {MODEL_OPTIONS.map((item) => (
+                            <option key={item.value} value={item.value}>{item.label}</option>
+                          ))}
+                        </select>
+                        <button type="button" onClick={run} disabled={isWorking}>
+                          <Play size={16} />
+                          <span>运行模型</span>
+                        </button>
+                      </div>
+                      <RecommendationView recommendation={recommendation} notice={recommendationNotice} />
+                    </Panel>
+                    {researchPath ? (
+                      <Panel title="研究路径" icon={<Sparkles size={17} />}>
+                        <ResearchPathView
+                          path={researchPath}
+                          onUseQuestion={useCandidateQuestion}
+                        />
+                        <CollaborationCheckpoints
+                          checkpoints={collaborationCheckpoints}
+                          confirmedIds={confirmedCheckpoints}
+                          onToggle={toggleCheckpoint}
+                          onFocus={focusCheckpointTarget}
+                        />
+                      </Panel>
+                    ) : null}
+                    {runResult ? (
+                      <Panel title="模型结果" icon={<Activity size={17} />}>
+                        <RunResultView result={runResult} notice={runNotice} />
+                      </Panel>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="dynamic-stack">
+                    <Panel title="报告入口" icon={<FileText size={17} />}>
+                      <div className="inline-report-panel">
+                        <div className="report-actions">
+                          <button type="button" onClick={makeReport} disabled={isWorking}>
+                            <FileText size={16} />
+                            <span>生成报告</span>
+                          </button>
+                          <button type="button" onClick={() => setShowReportPage(true)} disabled={!report.trim()} className="secondary">
+                            <ArrowRight size={16} />
+                            <span>查看报告</span>
+                          </button>
+                          <button className="secondary" type="button" onClick={exportReportMd} disabled={!report.trim()}>
+                            <Download size={16} />
+                            <span>导出 MD</span>
+                          </button>
+                          <button className="secondary" type="button" onClick={exportReportPdf} disabled={!report.trim()}>
+                            <Download size={16} />
+                            <span>导出 PDF</span>
+                          </button>
+                        </div>
+                        {report.trim() ? (
+                          <div className="report-entry">
+                            <MarkdownBody value={report} className="report report-rendered chat-markdown" />
+                            <div className="report-entry-actions" />
+                          </div>
+                        ) : (
+                          <div className="report report-empty">尚未生成报告。点击"生成报告"开始。</div>
+                        )}
+                      </div>
+                    </Panel>
+                    {runResult ? (
+                      <Panel title="模型结果" icon={<Activity size={17} />}>
+                        <RunResultView result={runResult} notice={runNotice} />
+                      </Panel>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {showChat ? (
+              <aside className="floating-chat">
+                <div className="panel">
+                  <h3>小计回答</h3>
+                  <button
+                    className="floating-chat-minimize"
+                    type="button"
+                    onClick={() => setShowChat(false)}
+                    title="收起小计"
+                  >
+                    <Minimize2 size={16} />
+                  </button>
+                  <div className="chat-tools">
+                    <button className="secondary chat-new-button" type="button" onClick={newChat} title="新建会话">
+                      <Plus size={15} />
+                      <span>新会话</span>
+                    </button>
+                    <div className="chat-history-wrap" ref={chatHistoryRef}>
+                      <button
+                        className={`secondary chat-history-button ${chatHistoryOpen ? "chat-history-open" : ""}`}
+                        type="button"
+                        onClick={() => setChatHistoryOpen((open) => !open)}
+                        title="查看历史对话"
+                      >
+                        <Search size={15} />
+                        <span>历史对话</span>
+                        <ChevronDown size={14} />
+                      </button>
+                      {chatHistoryOpen ? (
+                        <div className="chat-history-popover">
+                          <label className="chat-search-field" title="查找历史对话">
+                            <Search size={15} />
+                            <input
+                              value={chatSearch}
+                              placeholder="搜索历史对话"
+                              onChange={(event) => setChatSearch(event.target.value)}
+                            />
+                          </label>
+                          {filteredChatSessions.length > 0 ? (
+                            <div className="chat-session-list">
+                              {filteredChatSessions.map((session) => (
+                                <button
+                                  className={`chat-session ${session.id === currentChat?.id ? "chat-session-active" : ""}`}
+                                  type="button"
+                                  key={session.id}
+                                  onClick={() => openChat(session.id)}
+                                  title={session.title}
+                                >
+                                  <strong>{session.title}</strong>
+                                  <span>{formatChatTime(session.updatedAt)} · {chatPreview(session)}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="chat-session-empty">没有找到相关历史。</div>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="assistant-context">
+                    {contextSummary ? (
+                      <span className="assistant-context-line">{contextSummary}</span>
+                    ) : null}
+                  </div>
+                  <div className="chat-log" ref={chatLogRef}>
+                    {chatHistory.length === 0 ? <div className="empty">还没有对话。</div> : null}
+                    {chatHistory.map((item, index) => (
+                      <div className={`chat-item chat-${item.role}`} key={`${item.role}-${index}`}>
+                        <strong>{item.role === "user" ? "我" : "小计"}</strong>
+                        <ChatMessageBody message={item} />
+                      </div>
+                    ))}
+                    {busy === "chat" && pendingChatId === currentChat?.id ? <ThinkingMessage /> : null}
+                  </div>
+                  <div className="send-row">
+                    <input
+                      ref={chatInputRef}
+                      className="chat-input"
+                      value={chatInput}
+                      placeholder={CHAT_PLACEHOLDER}
+                      onChange={(event) => setChatInput(event.target.value)}
+                      onKeyDown={(event) => event.key === "Enter" && sendChat()}
+                    />
+                    <button type="button" onClick={sendChat} disabled={busy === "chat"} title="发送">
+                      <Send size={16} />
+                    </button>
+                  </div>
+                </div>
+              </aside>
+            ) : (
+              <button
+                className="floating-chat-launcher"
+                type="button"
+                onClick={() => setShowChat(true)}
+                title="打开小计回答"
+              >
+                <MessageSquare size={20} />
+                <span>小计</span>
+              </button>
+            )}
+          </>
         )}
+
+        {showGuideDrawer ? (
+          <>
+            <div className="guide-drawer-backdrop" onClick={() => setShowGuideDrawer(false)} />
+            <aside className="guide-drawer">
+              <div className="guide-drawer-head">
+                <h2>新手引导</h2>
+                <button className="icon-button" type="button" onClick={() => setShowGuideDrawer(false)} title="关闭">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="guide-panel">
+                <UserGuideView />
+              </div>
+            </aside>
+          </>
+        ) : null}
+
+        {!showReportPage ? (
+          <button
+            className="guide-floating-button"
+            type="button"
+            onClick={() => setShowGuideDrawer(true)}
+            title="使用文档"
+          >
+            <HelpCircle size={22} />
+          </button>
+        ) : null}
       </section>
     </main>
   );
@@ -2497,35 +2494,35 @@ function UserGuideView() {
   const sections = [
     {
       title: "1. 打开和确认状态",
-      text: "双击项目根目录的 小计.exe。启动后看顶部状态条：显示“后端服务在线”时，本地分析服务已经准备好。顶部的“工作台、字段画像、研究路径、分析报告、使用文档”用于切换主要页面。"
+      text: "双击项目根目录的 小计.exe。启动后看顶部状态条：显示「后端服务在线」时，本地分析服务已经准备好。工作台以中栏 4 步分析流程为主轴，左侧放数据端信息，右侧是浮动问答小窗。"
     },
     {
-      title: "2. 选择数据或使用演示",
-      text: "自己的数据点击左侧“选择”，支持 CSV、xlsx、xls。路演或课堂展示点击“演示”，它会加载城市面板演示数据，并自动准备研究问题、变量、模型推荐、运行结果和报告草稿。"
+      title: "2. 选择数据或使用示例",
+      text: "自己的数据点击左侧「选择」，支持 CSV、xlsx、xls。想快速体验完整流程时点击「示例」，它会加载城市面板示例数据，并自动准备研究问题、变量、模型推荐、运行结果和报告草稿。"
     },
     {
       title: "3. 生成字段画像",
-      text: "选择文件后点击“生成字段画像”。小计会读取字段类型、缺失值、唯一值、样例值、重复行、可能的个体列和时间列，还会把明显的数据质量风险提前列出来。字段画像只提供线索，不直接替代研究判断。"
+      text: "选择文件后点击左侧「生成字段画像」。小计会读取字段类型、缺失值、唯一值、样例值、重复行、可能的个体列和时间列，还会把明显的数据质量风险提前列出来。生成后中栏第 1 步会展示关系地图和字段详情表。"
     },
     {
-      title: "4. 填写研究问题和变量",
-      text: "中间栏顶部填写研究问题，例如“数字经济发展是否会提升城市创新水平？”。左侧变量配置里填写被解释变量 Y、解释变量 X，以及个体列、时间列、处理列、断点变量或工具变量。多个 X 用英文逗号分隔。"
+      title: "4. 填写研究问题和变量（第 1-2 步）",
+      text: "中栏第 1 步填写研究问题，例如「数字经济发展是否会提升城市创新水平？」。第 2 步填写被解释变量 Y、解释变量 X，以及个体列、时间列、处理列、断点变量或工具变量。多个 X 用英文逗号分隔。点击左侧步骤按钮即可切换。"
     },
     {
-      title: "5. 推荐并运行模型",
-      text: "点击“推荐模型”后，小计会根据研究问题、字段和变量配置给出模型建议。确认后点击“运行模型”。当前 OLS、Logit、面板固定效应支持直接运行；DID、RDD、IV-2SLS 会先给识别路径、检查清单和代码模板。"
+      title: "5. 推荐并运行模型（第 3 步）",
+      text: "进入中栏第 3 步，点击「推荐模型」后小计会根据研究问题、字段和变量配置给出模型建议。确认模型类型后点击「运行模型」。当前 OLS、Logit、面板固定效应支持直接运行；DID、RDD、IV-2SLS 会先给识别路径、检查清单和代码模板。完整模型检验框架见项目文档 docs/model-check-framework.md。"
     },
     {
       title: "6. 查看研究路径",
-      text: "点顶部“研究路径”，可以看到候选研究问题、变量设定、识别思路、假设边界和协作检查点。候选问题可以直接采用，也可以放入右侧问答继续追问。答辩卡适合准备老师可能会问的因果边界、数据质量和 Demo 价值问题。"
+      text: "第 3 步动态面板中会展示研究路径，包含候选研究问题、变量设定、识别思路、假设边界和协作检查点。候选问题可以直接采用，也可以放入右侧问答继续展开。"
     },
     {
-      title: "7. 使用小计问答",
-      text: "右侧问答会读取当前字段画像、研究问题、变量配置、模型推荐、模型结果和报告草稿。建议先生成字段画像和模型推荐，再问“为什么推荐这个模型”“系数怎么解释”“下一步要检查什么”。右侧可以新建会话，也可以搜索历史会话。"
+      title: "7. 使用小计问答（右侧浮动窗）",
+      text: "点击右下角「小计」浮动按钮打开问答窗。问答会读取当前字段画像、研究问题、变量配置、模型推荐、模型结果和报告草稿。建议先生成字段画像和模型推荐，再输入自己的问题，例如「为什么推荐这个模型」「系数怎么解释」「下一步要检查什么」。"
     },
     {
-      title: "8. 生成和导出报告",
-      text: "点顶部“分析报告”，再点“生成报告”。报告会汇总研究问题、模型选择、核心结果、数据风险和下一步建议。可以导出 MD 继续编辑，也可以导出 PDF 用于提交或发送。"
+      title: "8. 生成和导出报告（第 4 步）",
+      text: "进入第 4 步点击「生成报告」，再点击「查看报告」进入全屏报告页。报告页左侧有目录，中间是 Markdown 预览，右侧可以打开小计对话辅助润色。支持导出 MD 和 PDF。"
     },
     {
       title: "9. 配置模型",
@@ -2541,14 +2538,23 @@ function UserGuideView() {
     <div className="guide-body">
       <div className="guide-lead">
         <strong>从数据到报告的完整流程</strong>
-        <span>按下面顺序走一遍，就能完成一次课堂演示或论文建模草稿。</span>
+        <span>按下面顺序走一遍，就能完成一次建模练习或论文建模草稿。</span>
       </div>
       <div className="guide-grid">
         {sections.map((section) => (
-          <section className="guide-section" key={section.title}>
-            <h3>{section.title}</h3>
+          <details className="guide-section" key={section.title}>
+            <summary>
+              <span className="guide-section-number">{section.title}</span>
+              <div className="guide-section-copy">
+                <strong>{section.title}</strong>
+                <span>{section.text?.substring(0, 40)}</span>
+              </div>
+              <span className="guide-section-icon">
+                <ChevronDown size={16} />
+              </span>
+            </summary>
             <p>{section.text}</p>
-          </section>
+          </details>
         ))}
       </div>
     </div>
@@ -2599,39 +2605,12 @@ function PanelResizeHandle({
   );
 }
 
-function DemoFlow({ stage }: { stage: DemoStage }) {
-  return (
-    <div className={`demo-flow demo-flow-${stage}`}>
-      <div className="demo-flow-head">
-        <strong>路演流程</strong>
-        <span>{demoStageLabel(stage)}</span>
-      </div>
-      <div className="demo-step-list">
-        {DEMO_FLOW_STEPS.map((item) => {
-          const state = demoStepState(stage, item.stage);
-          return (
-            <div className={`demo-step demo-step-${state}`} key={item.stage}>
-              <i />
-              <div>
-                <strong>{item.title}</strong>
-                <span>{item.detail}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function DemoScenarioBrief({
   profile,
-  stage,
-  onAsk
+  stage
 }: {
   profile: DataProfile | null;
   stage: DemoStage;
-  onAsk: (question: string) => void;
 }) {
   if (stage === "idle" && !isDemoProfile(profile)) return null;
 
@@ -2648,12 +2627,26 @@ function DemoScenarioBrief({
   return (
     <details className="scenario-brief">
       <summary>
-        <span>演示场景</span>
+        <span>示例说明</span>
         <strong>城市面板</strong>
       </summary>
       <p>
-        这份演示数据把多个城市跨年份数据放在一起，问题不是单纯写一段 OLS，而是先识别城市 × 年份结构，再讨论固定效应、控制变量和因果边界。
+        这份示例数据把多个城市跨年份数据放在一起，用来学习从字段画像、变量设定到模型运行的完整流程。你可以直接换成自己的 CSV 或 Excel。
       </p>
+      <div className="scenario-learning-list">
+        <div>
+          <strong>1</strong>
+          <span>先看字段画像，理解每一列是什么、有没有缺失和异常。</span>
+        </div>
+        <div>
+          <strong>2</strong>
+          <span>再确认研究问题、Y、X、个体列和时间列。</span>
+        </div>
+        <div>
+          <strong>3</strong>
+          <span>最后查看模型推荐、运行结果和报告草稿。</span>
+        </div>
+      </div>
       <div className="scenario-grid">
         <div>
           <span>研究对象</span>
@@ -2664,8 +2657,8 @@ function DemoScenarioBrief({
           <strong>面板固定效应</strong>
         </div>
         <div>
-          <span>展示重点</span>
-          <strong>发现关系，不替代判断</strong>
+          <span>学习重点</span>
+          <strong>数据结构与模型检查</strong>
         </div>
       </div>
       <div className="scenario-field-list">
@@ -2674,152 +2667,6 @@ function DemoScenarioBrief({
             <strong>{name}</strong>
             {label}
           </span>
-        ))}
-      </div>
-      <button
-        className="scenario-ask"
-        type="button"
-        onClick={() => onAsk("请帮我用答辩口吻解释这个城市面板演示为什么比普通 OLS 演示更有说服力。")}
-      >
-        追问场景价值
-      </button>
-    </details>
-  );
-}
-
-function DemoBrief({
-  profile,
-  path,
-  recommendation,
-  runResult,
-  stage,
-  onAsk
-}: {
-  profile: DataProfile | null;
-  path: ResearchPath | null;
-  recommendation: ModelRecommendation | null;
-  runResult: RunModelResponse | null;
-  stage: DemoStage;
-  onAsk: (question: string) => void;
-}) {
-  if (stage === "idle" && !isDemoProfile(profile)) return null;
-
-  const model = recommendation?.model ?? path?.model ?? DEMO_MODEL_TYPE;
-  const structure = path?.structure ?? "城市 × 年份面板演示数据，用来展示从数据画像到模型结果的完整路径。";
-  const resultText = demoResultText(runResult);
-
-  return (
-    <div className="demo-brief">
-      <div className="demo-brief-head">
-        <span>演示讲解卡</span>
-        <strong>{stage === "ready" ? "可直接讲" : "准备中"}</strong>
-      </div>
-      <p className="demo-brief-lead">这不是让小计替研究者下结论，而是让它把“发现问题、选择路径、解释边界”串起来。</p>
-      <div className="demo-brief-list">
-        <div>
-          <span>1</span>
-          <p>{structure}</p>
-        </div>
-        <div>
-          <span>2</span>
-          <p>{demoFindingText(profile)}</p>
-        </div>
-        <div>
-          <span>3</span>
-          <p>推荐使用 {modelLabel(model)}，先控制城市和年份层面的固定差异。</p>
-        </div>
-        <div>
-          <span>4</span>
-          <p>{resultText}</p>
-        </div>
-      </div>
-      <div className="review-questions">
-        <div className="review-questions-title">评审追问</div>
-        <div className="review-question-list">
-          {DEMO_REVIEW_QUESTIONS.map((item) => (
-            <button className="review-question" type="button" key={item.label} onClick={() => onAsk(item.question)}>
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DemoScript({
-  profile,
-  path,
-  recommendation,
-  runResult,
-  stage
-}: {
-  profile: DataProfile | null;
-  path: ResearchPath | null;
-  recommendation: ModelRecommendation | null;
-  runResult: RunModelResponse | null;
-  stage: DemoStage;
-}) {
-  if (stage === "idle" && !isDemoProfile(profile)) return null;
-
-  const sections = buildDemoScript({ profile, path, recommendation, runResult });
-
-  return (
-    <div className="demo-script">
-      <div className="demo-script-head">
-        <span>路演稿</span>
-        <strong>3 分钟</strong>
-      </div>
-      <div className="demo-script-list">
-        {sections.map((section) => (
-          <div className="demo-script-item" key={section.time}>
-            <span>{section.time}</span>
-            <div>
-              <strong>{section.title}</strong>
-              <p>{section.text}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DefenseCardsView({
-  profile,
-  path,
-  recommendation,
-  runResult,
-  onAsk
-}: {
-  profile: DataProfile | null;
-  path: ResearchPath | null;
-  recommendation: ModelRecommendation | null;
-  runResult: RunModelResponse | null;
-  onAsk: (question: string) => void;
-}) {
-  if (!profile && !path) return null;
-
-  const cards = buildDefenseCards({ profile, path, recommendation, runResult });
-
-  return (
-    <details className="defense-cards">
-      <summary>
-        <span>现场答辩卡</span>
-        <strong>{cards.length} 个常见问题</strong>
-      </summary>
-      <div className="defense-card-list">
-        {cards.map((card) => (
-          <article className="defense-card" key={card.title}>
-            <div className="defense-card-head">
-              <span>{card.title}</span>
-              <button type="button" onClick={() => onAsk(card.prompt)}>
-                放入问答
-              </button>
-            </div>
-            <strong>{card.question}</strong>
-            <p>{card.answer}</p>
-          </article>
         ))}
       </div>
     </details>
@@ -3041,17 +2888,14 @@ function dataQualityRisks(profile: DataProfile): string[] {
 }
 
 function DataQualityBrief({
-  profile,
-  onAsk
+  profile
 }: {
   profile: DataProfile | null;
-  onAsk: (question: string) => void;
 }) {
   if (!profile) return null;
 
   const diagnostics = profile.diagnostics;
   const riskItems = dataQualityRisks(profile);
-  const askText = "这份数据目前最值得优先处理的质量风险是什么？请按缺失、重复、异常值、变量关系和建模影响分点说明。";
 
   if (!diagnostics) {
     return (
@@ -3087,9 +2931,7 @@ function DataQualityBrief({
     <div className="quality-brief">
       <div className="quality-head">
         <span>数据体检</span>
-        <button className="quality-ask" type="button" onClick={() => onAsk(askText)}>
-          追问风险
-        </button>
+        <strong>概览</strong>
       </div>
       <div className="quality-metrics">
         <div>
@@ -3338,12 +3180,10 @@ function shortVariableName(name: string): string {
 
 function ResearchPathView({
   path,
-  onUseQuestion,
-  onAskQuestion
+  onUseQuestion
 }: {
   path: ResearchPath | null;
   onUseQuestion: (question: string) => void;
-  onAskQuestion: (question: string) => void;
 }) {
   if (!path) {
     return <div className="empty">等待数据画像。</div>;
@@ -3357,14 +3197,13 @@ function ResearchPathView({
       </div>
 
       <div className="path-section">
-        <div className="path-title">可追问的问题</div>
+        <div className="path-title">候选研究问题</div>
         <div className="question-candidate-list">
           {path.questionCandidates.map((item) => (
             <div className="question-candidate" key={item}>
               <p>{item}</p>
               <div>
                 <button type="button" onClick={() => onUseQuestion(item)}>采用</button>
-                <button type="button" onClick={() => onAskQuestion(`围绕这个研究问题继续展开：${item}`)}>追问</button>
               </div>
             </div>
           ))}

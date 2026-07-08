@@ -15,8 +15,11 @@ function projectRoot() {
 }
 
 function pythonPath(root: string) {
-  const localPython = path.join(root, ".venv", "Scripts", "python.exe");
-  return fs.existsSync(localPython) ? localPython : "python";
+  const candidates = [
+    path.join(root, ".venv", "Scripts", "python.exe"),
+    path.join(root, "..", ".venv", "Scripts", "python.exe")
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? "python";
 }
 
 function packagedSidecarPath() {

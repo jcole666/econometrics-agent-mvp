@@ -1,6 +1,6 @@
 {
   "name": "econometrics-agent-workbench",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Desktop workbench for econometric model selection, execution, and reporting.",
   "author": "jcole666",
   "private": true,
@@ -56,6 +56,10 @@
       {
         "from": "../../docs/user-guide.md",
         "to": "docs/user-guide.md"
+      },
+      {
+        "from": "../../docs/model-check-framework.md",
+        "to": "docs/model-check-framework.md"
       }
     ],
     "win": {
