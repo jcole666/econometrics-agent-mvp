@@ -58,6 +58,7 @@ import {
   toLLMConfig,
   type ModelSettings
 } from "./modelSettings";
+import { saveReportMarkdown, saveReportPdf } from "./reportExport";
 import {
   buildSampleRequest,
   isSampleProfile,
@@ -1599,78 +1600,14 @@ export default function App() {
     }
   }
 
-  function reportFileBase() {
-    const text = question.replace(/\s+/g, " ").trim();
-    if (!text) return "分析报告";
-    return text.length > 18 ? text.slice(0, 18) : text;
-  }
-
-  function downloadTextFile(fileName: string, content: string) {
-    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function showExportResult(result: SaveFileResult | undefined, label: string) {
-    if (!result) return;
-    if (result.ok) {
-      setStatus(result.filePath ? `${label}已导出：${result.filePath}` : `${label}已导出。`);
-      return;
-    }
-    if (result.canceled) {
-      setStatus("已取消导出。");
-      return;
-    }
-    setStatus(result.error || `${label}导出失败。`);
-  }
-
   async function exportReportMd() {
-    if (!report.trim()) {
-      setStatus("请先生成报告。");
-      return;
-    }
-
-    const fileName = `${reportFileBase()}.md`;
-    try {
-      if (window.workbench?.saveTextFile) {
-        const result = await window.workbench.saveTextFile({ fileName, content: report });
-        showExportResult(result, "Markdown");
-      } else {
-        downloadTextFile(fileName, report);
-        setStatus("Markdown 已导出。");
-      }
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Markdown 导出失败。");
-    }
+    const message = await saveReportMarkdown(report, question);
+    if (message) setStatus(message);
   }
 
   async function exportReportPdf() {
-    if (!report.trim()) {
-      setStatus("请先生成报告。");
-      return;
-    }
-
-    if (!window.workbench?.saveReportPdf) {
-      setStatus("PDF 导出需要在桌面应用中使用。");
-      return;
-    }
-
-    try {
-      const result = await window.workbench.saveReportPdf({
-        fileName: `${reportFileBase()}.pdf`,
-        title: question.trim() || "分析报告",
-        markdown: report
-      });
-      showExportResult(result, "PDF");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "PDF 导出失败。");
-    }
+    const message = await saveReportPdf(report, question);
+    if (message) setStatus(message);
   }
 
   return (
