@@ -53,14 +53,39 @@ import type {
   RunModelResponse
 } from "./types";
 
-const DEFAULT_QUESTION = "数字经济发展是否会提升城市创新水平？";
-const DEFAULT_COLUMNS = "city, province, region, year, innovation_index, digital_economy_index, broadband_access, fiscal_science_spending, human_capital, industrial_upgrade, population_density, smart_city_pilot, green_patent_share";
-const DEFAULT_DEPENDENT_VARIABLE = "innovation_index";
-const DEFAULT_INDEPENDENT_VARIABLES = "digital_economy_index, broadband_access, fiscal_science_spending, human_capital, industrial_upgrade, population_density";
-const QUESTION_PLACEHOLDER = `例如：${DEFAULT_QUESTION}`;
-const COLUMNS_PLACEHOLDER = `例如：${DEFAULT_COLUMNS}`;
-const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${DEFAULT_DEPENDENT_VARIABLE}`;
-const INDEPENDENT_VARIABLES_PLACEHOLDER = `例如：${DEFAULT_INDEPENDENT_VARIABLES}`;
+const SAMPLE_SCENARIO = {
+  question: "数字经济发展是否会提升城市创新水平？",
+  columns: "city, province, region, year, innovation_index, digital_economy_index, broadband_access, fiscal_science_spending, human_capital, industrial_upgrade, population_density, smart_city_pilot, green_patent_share",
+  dependentVariable: "innovation_index",
+  independentVariables: "digital_economy_index, broadband_access, fiscal_science_spending, human_capital, industrial_upgrade, population_density",
+  entityColumn: "city",
+  timeColumn: "year",
+  modelType: "Panel Fixed Effects",
+  brief: {
+    title: "城市面板",
+    subject: "数字经济与城市创新",
+    method: "面板固定效应",
+    focus: "数据结构与模型检查"
+  },
+  learningSteps: [
+    "先看字段画像，理解每一列是什么、有没有缺失和异常。",
+    "再确认研究问题、Y、X、个体列和时间列。",
+    "最后查看模型推荐、运行结果和报告草稿。"
+  ],
+  fields: [
+    ["innovation_index", "城市创新水平"],
+    ["digital_economy_index", "数字经济发展水平"],
+    ["broadband_access", "数字基础设施"],
+    ["fiscal_science_spending", "财政科技支出"],
+    ["human_capital", "人力资本"],
+    ["industrial_upgrade", "产业结构升级"],
+    ["smart_city_pilot", "智慧城市试点"]
+  ] as Array<[string, string]>
+};
+const QUESTION_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.question}`;
+const COLUMNS_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.columns}`;
+const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.dependentVariable}`;
+const INDEPENDENT_VARIABLES_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.independentVariables}`;
 const CHAT_PLACEHOLDER = "例如：为什么推荐这个模型？";
 const SETTINGS_KEY = "econometrics-agent.model-settings";
 const CHAT_SESSIONS_KEY = "econometrics-agent.chat-sessions";
@@ -69,7 +94,7 @@ const LAYOUT_WIDTHS_KEY = "econometrics-agent.layout-widths";
 const PANEL_HEIGHTS_KEY = "econometrics-agent.panel-heights";
 
 const DEFAULT_RAIL_WIDTHS = { left: 330, right: 360 };
-const DEMO_RAIL_WIDTHS = { left: 370, right: 420 };
+const SAMPLE_RAIL_WIDTHS = { left: 370, right: 420 };
 const MIN_LEFT_RAIL = 280;
 const MIN_MAIN_RAIL = 420;
 const MIN_RIGHT_RAIL = 320;
@@ -79,7 +104,7 @@ const DEFAULT_PANEL_HEIGHTS = {
   main: { question: 220, profile: 300, path: 360, recommendation: 280, result: 280 },
   right: { chat: 660 }
 };
-const DEMO_PANEL_HEIGHTS = {
+const SAMPLE_PANEL_HEIGHTS = {
   left: { data: 640, variables: 330, report: 360 },
   main: { question: 210, profile: 300, path: 430, recommendation: 280, result: 330 },
   right: { chat: 760 }
@@ -95,12 +120,8 @@ const PANEL_MIN_HEIGHTS = {
   result: 220,
   chat: 360
 };
-const DEMO_MODEL_TYPE = "Panel Fixed Effects";
-const DEMO_ENTITY_COLUMN = "city";
-const DEMO_TIME_COLUMN = "year";
-
-type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "demo";
-type DemoStage = "idle" | "data" | "recommend" | "run" | "report" | "ready" | "error";
+type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample";
+type SampleStage = "idle" | "data" | "recommend" | "run" | "report" | "ready" | "error";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
 type RailId = keyof typeof DEFAULT_PANEL_HEIGHTS;
@@ -381,10 +402,15 @@ function resultBoundary(model: string | undefined): string {
   return "当前结果适合作为第一版判断，正式写作前还需要补充稳健性和诊断检查。";
 }
 
-function isDemoProfile(profile: DataProfile | null): boolean {
+function isSampleProfile(profile: DataProfile | null): boolean {
   if (!profile) return false;
   const names = new Set(profile.columns.map((column) => column.name));
-  return names.has("innovation_index") && names.has("digital_economy_index") && names.has("city") && names.has("year");
+  return (
+    names.has(SAMPLE_SCENARIO.dependentVariable) &&
+    names.has("digital_economy_index") &&
+    names.has(SAMPLE_SCENARIO.entityColumn) &&
+    names.has(SAMPLE_SCENARIO.timeColumn)
+  );
 }
 
 function firstExistingColumn(profile: DataProfile, names: string[]): string | null {
@@ -396,7 +422,7 @@ function fallbackOutcome(profile: DataProfile): string {
   return (
     firstExistingColumn(profile, ["innovation_index", "income", "employment", "gdp", "score"]) ??
     profile.columns.find((column) => column.kind === "数值")?.name ??
-    DEFAULT_DEPENDENT_VARIABLE
+    SAMPLE_SCENARIO.dependentVariable
   );
 }
 
@@ -717,14 +743,14 @@ function buildChatContext({
   };
 }
 
-function buildDemoRequest(sampleProfile: DataProfile): ModelRequest {
+function buildSampleRequest(sampleProfile: DataProfile): ModelRequest {
   return {
-    research_question: DEFAULT_QUESTION,
+    research_question: SAMPLE_SCENARIO.question,
     columns: sampleProfile.columns.map((column) => column.name),
-    dependent_variable: DEFAULT_DEPENDENT_VARIABLE,
-    independent_variables: splitList(DEFAULT_INDEPENDENT_VARIABLES),
-    entity_column: DEMO_ENTITY_COLUMN,
-    time_column: DEMO_TIME_COLUMN,
+    dependent_variable: SAMPLE_SCENARIO.dependentVariable,
+    independent_variables: splitList(SAMPLE_SCENARIO.independentVariables),
+    entity_column: SAMPLE_SCENARIO.entityColumn,
+    time_column: SAMPLE_SCENARIO.timeColumn,
     treatment_column: null,
     running_variable: null,
     instrument_variable: null,
@@ -1101,7 +1127,7 @@ export default function App() {
   const [report, setReport] = useState("");
   const [status, setStatus] = useState("就绪");
   const [busy, setBusy] = useState<BusyKey | null>(null);
-  const [demoStage, setDemoStage] = useState<DemoStage>("idle");
+  const [sampleStage, setSampleStage] = useState<SampleStage>("idle");
   const [activeStep, setActiveStep] = useState<number>(1);
   const [showReportPage, setShowReportPage] = useState(false);
   const [showGuideDrawer, setShowGuideDrawer] = useState(false);
@@ -1259,11 +1285,11 @@ export default function App() {
     setActiveStep(1);
     setShowReportPage(false);
     setShowGuideDrawer(false);
-    setRailWidths(fitRailWidths(DEMO_RAIL_WIDTHS, workspaceRailSpace()));
+    setRailWidths(fitRailWidths(SAMPLE_RAIL_WIDTHS, workspaceRailSpace()));
     setPanelHeights({
-      left: { ...DEMO_PANEL_HEIGHTS.left },
-      main: { ...DEMO_PANEL_HEIGHTS.main },
-      right: { ...DEMO_PANEL_HEIGHTS.right }
+      left: { ...SAMPLE_PANEL_HEIGHTS.left },
+      main: { ...SAMPLE_PANEL_HEIGHTS.main },
+      right: { ...SAMPLE_PANEL_HEIGHTS.right }
     });
     setStatus("已恢复推荐布局。");
   }
@@ -1494,7 +1520,7 @@ export default function App() {
     setRunResult(null);
     setRunNotice(null);
     setReport("");
-    setDemoStage("idle");
+    setSampleStage("idle");
     setActiveStep(1);
     setShowReportPage(false);
     setConfirmedCheckpoints([]);
@@ -1613,46 +1639,46 @@ export default function App() {
     }
   }
 
-  function applyDemoState(sampleFile: File, sampleProfile: DataProfile) {
+  function applySampleState(sampleFile: File, sampleProfile: DataProfile) {
     setFile(sampleFile);
     setProfile(sampleProfile);
-    setQuestion(DEFAULT_QUESTION);
+    setQuestion(SAMPLE_SCENARIO.question);
     setColumnsInput(sampleProfile.columns.map((column) => column.name).join(", "));
-    setDependentVariable(DEFAULT_DEPENDENT_VARIABLE);
-    setIndependentVariables(DEFAULT_INDEPENDENT_VARIABLES);
-    setEntityColumn("city");
-    setTimeColumn("year");
+    setDependentVariable(SAMPLE_SCENARIO.dependentVariable);
+    setIndependentVariables(SAMPLE_SCENARIO.independentVariables);
+    setEntityColumn(SAMPLE_SCENARIO.entityColumn);
+    setTimeColumn(SAMPLE_SCENARIO.timeColumn);
     setTreatmentColumn("");
     setRunningVariable("");
     setInstrumentVariable("");
-    setModelType("Panel Fixed Effects");
+    setModelType(SAMPLE_SCENARIO.modelType);
     setInference(null);
     setRecommendation(null);
     setRecommendationNotice(null);
     setRunResult(null);
     setRunNotice(null);
     setReport("");
-    setDemoStage("data");
+    setSampleStage("data");
   }
 
-  async function loadDemoScenario() {
-    setBusy("demo");
+  async function loadSampleScenario() {
+    setBusy("sample");
     setActiveStep(1);
-    setDemoStage("data");
+    setSampleStage("data");
     try {
       const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
-      applyDemoState(sampleFile, sampleProfile);
+      applySampleState(sampleFile, sampleProfile);
 
-      const request = buildDemoRequest(sampleProfile);
+      const request = buildSampleRequest(sampleProfile);
 
-      setDemoStage("recommend");
+      setSampleStage("recommend");
       setStatus("正在准备示例：生成模型推荐。");
       const nextRecommendation = await recommendModel(request);
-      const nextModel = nextRecommendation.model || DEMO_MODEL_TYPE;
+      const nextModel = nextRecommendation.model || SAMPLE_SCENARIO.modelType;
       setRecommendation(nextRecommendation);
       setModelType(nextModel);
 
-      setDemoStage("run");
+      setSampleStage("run");
       setStatus("正在准备示例：运行模型。");
       const nextRunResult = await runModel(sampleFile, request, nextModel);
       setRunResult(nextRunResult);
@@ -1663,11 +1689,11 @@ export default function App() {
 
       const nextPath = buildResearchPath({
         profile: sampleProfile,
-        question: DEFAULT_QUESTION,
-        dependentVariable: DEFAULT_DEPENDENT_VARIABLE,
-        independentVariables: DEFAULT_INDEPENDENT_VARIABLES,
-        entityColumn: DEMO_ENTITY_COLUMN,
-        timeColumn: DEMO_TIME_COLUMN,
+        question: SAMPLE_SCENARIO.question,
+        dependentVariable: SAMPLE_SCENARIO.dependentVariable,
+        independentVariables: SAMPLE_SCENARIO.independentVariables,
+        entityColumn: SAMPLE_SCENARIO.entityColumn,
+        timeColumn: SAMPLE_SCENARIO.timeColumn,
         modelType: nextModel,
         recommendation: nextRecommendation,
       });
@@ -1678,15 +1704,15 @@ export default function App() {
         inferenceReasoning: null
       });
 
-      setDemoStage("report");
+      setSampleStage("report");
       setStatus("正在准备示例：生成报告。");
-      const nextReport = await generateReport(DEFAULT_QUESTION, nextModel, nextRunResult.results, notes, { enabled: false });
+      const nextReport = await generateReport(SAMPLE_SCENARIO.question, nextModel, nextRunResult.results, notes, { enabled: false });
       setReport(nextReport.markdown);
       setConfirmedCheckpoints(["question", "data", "variables", "recommendation"]);
-      setDemoStage("ready");
+      setSampleStage("ready");
       setStatus("示例已准备好：数据、推荐、结果和报告都已生成。");
     } catch (error) {
-      setDemoStage("error");
+      setSampleStage("error");
       setStatus(error instanceof Error ? error.message : "示例数据加载失败。");
     } finally {
       setBusy(null);
@@ -2087,13 +2113,13 @@ export default function App() {
                     <span>选择</span>
                     <input type="file" accept=".csv,.xlsx,.xls" onChange={onFileChange} />
                   </label>
-                  <button type="button" onClick={loadDemoScenario} disabled={isWorking} title="一键加载示例数据">
+                  <button type="button" onClick={loadSampleScenario} disabled={isWorking} title="一键加载示例数据">
                     <Sparkles size={16} />
-                    <span>{busy === "demo" ? "准备中" : "示例"}</span>
+                    <span>{busy === "sample" ? "准备中" : "示例"}</span>
                   </button>
                 </div>
                 <div className="filename">{file?.name ?? "尚未选择文件"}</div>
-                <DemoScenarioBrief profile={profile} stage={demoStage} />
+                <SampleScenarioBrief profile={profile} stage={sampleStage} />
                 <DataQualityBrief profile={profile} />
                 <button className="wide" type="button" onClick={loadProfile} disabled={!file || isWorking}>
                   <RefreshCw size={16} />
@@ -2605,64 +2631,48 @@ function PanelResizeHandle({
   );
 }
 
-function DemoScenarioBrief({
+function SampleScenarioBrief({
   profile,
   stage
 }: {
   profile: DataProfile | null;
-  stage: DemoStage;
+  stage: SampleStage;
 }) {
-  if (stage === "idle" && !isDemoProfile(profile)) return null;
-
-  const fieldNotes = [
-    ["innovation_index", "城市创新水平"],
-    ["digital_economy_index", "数字经济发展水平"],
-    ["broadband_access", "数字基础设施"],
-    ["fiscal_science_spending", "财政科技支出"],
-    ["human_capital", "人力资本"],
-    ["industrial_upgrade", "产业结构升级"],
-    ["smart_city_pilot", "智慧城市试点"]
-  ];
+  if (stage === "idle" && !isSampleProfile(profile)) return null;
 
   return (
     <details className="scenario-brief">
       <summary>
         <span>示例说明</span>
-        <strong>城市面板</strong>
+        <strong>{SAMPLE_SCENARIO.brief.title}</strong>
       </summary>
       <p>
         这份示例数据把多个城市跨年份数据放在一起，用来学习从字段画像、变量设定到模型运行的完整流程。你可以直接换成自己的 CSV 或 Excel。
       </p>
       <div className="scenario-learning-list">
-        <div>
-          <strong>1</strong>
-          <span>先看字段画像，理解每一列是什么、有没有缺失和异常。</span>
-        </div>
-        <div>
-          <strong>2</strong>
-          <span>再确认研究问题、Y、X、个体列和时间列。</span>
-        </div>
-        <div>
-          <strong>3</strong>
-          <span>最后查看模型推荐、运行结果和报告草稿。</span>
-        </div>
+        {SAMPLE_SCENARIO.learningSteps.map((step, index) => (
+          <div key={step}>
+            <strong>{index + 1}</strong>
+            <span>{step}</span>
+          </div>
+        ))}
       </div>
       <div className="scenario-grid">
         <div>
           <span>研究对象</span>
-          <strong>数字经济与城市创新</strong>
+          <strong>{SAMPLE_SCENARIO.brief.subject}</strong>
         </div>
         <div>
           <span>识别路径</span>
-          <strong>面板固定效应</strong>
+          <strong>{SAMPLE_SCENARIO.brief.method}</strong>
         </div>
         <div>
           <span>学习重点</span>
-          <strong>数据结构与模型检查</strong>
+          <strong>{SAMPLE_SCENARIO.brief.focus}</strong>
         </div>
       </div>
       <div className="scenario-field-list">
-        {fieldNotes.map(([name, label]) => (
+        {SAMPLE_SCENARIO.fields.map(([name, label]) => (
           <span key={name}>
             <strong>{name}</strong>
             {label}
