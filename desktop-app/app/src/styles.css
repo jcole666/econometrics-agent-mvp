@@ -1393,6 +1393,62 @@ body.resizing-panels * {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+.variable-reference {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 10px;
+}
+.variable-reference-empty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.variable-reference-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.variable-reference-head span,
+.variable-reference-head strong,
+.variable-reference-group > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+.variable-reference-groups {
+  display: grid;
+  gap: 8px;
+}
+.variable-reference-group {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+.variable-reference-group div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.variable-chip {
+  max-width: 180px;
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fbfdf9;
+  color: var(--ink);
+  padding: 3px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 750;
+}
 .field {
   margin: 0;
 }

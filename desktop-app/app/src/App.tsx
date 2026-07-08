@@ -1655,13 +1655,9 @@ export default function App() {
                           <Input label="断点变量" value={runningVariable} onChange={setRunningVariable} />
                           <Input label="工具变量" value={instrumentVariable} onChange={setInstrumentVariable} />
                         </div>
+                        <VariableColumnReference profile={profile} />
                       </div>
                     </Panel>
-                    {profile ? (
-                      <Panel title="字段画像" icon={<TableProperties size={17} />}>
-                        <ProfileTable profile={profile} />
-                      </Panel>
-                    ) : null}
                   </div>
                 ) : activeStep === 3 ? (
                   <div className="dynamic-stack">
@@ -2164,6 +2160,59 @@ function Input({ label, value, onChange }: { label: string; value: string; onCha
       <span>{label}</span>
       <input value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
+  );
+}
+
+function VariableColumnReference({ profile }: { profile: DataProfile | null }) {
+  if (!profile) {
+    return (
+      <div className="variable-reference variable-reference-empty">
+        生成字段画像后，这里会显示可用字段参考。
+      </div>
+    );
+  }
+
+  const numericColumns = profile.columns.filter((column) => (
+    column.kind === "numeric" || /int|float|double|number|decimal/i.test(column.dtype)
+  ));
+  const entityNames = new Set([
+    ...(profile.diagnostics?.possible_entity_columns ?? []),
+    profile.diagnostics?.panel_hint?.entity_column
+  ].filter(Boolean));
+  const timeNames = new Set([
+    ...(profile.diagnostics?.possible_time_columns ?? []),
+    profile.diagnostics?.panel_hint?.time_column
+  ].filter(Boolean));
+  const structureColumns = profile.columns.filter((column) => entityNames.has(column.name) || timeNames.has(column.name));
+  const used = new Set([...numericColumns, ...structureColumns].map((column) => column.name));
+  const otherColumns = profile.columns.filter((column) => !used.has(column.name));
+  const groups = [
+    { title: "Y / X 候选", columns: numericColumns.slice(0, 10) },
+    { title: "个体 / 时间", columns: structureColumns.slice(0, 8) },
+    { title: "其他字段", columns: otherColumns.slice(0, 8) }
+  ].filter((group) => group.columns.length > 0);
+
+  return (
+    <div className="variable-reference">
+      <div className="variable-reference-head">
+        <span>字段参考</span>
+        <strong>{profile.columns.length} 列</strong>
+      </div>
+      <div className="variable-reference-groups">
+        {groups.map((group) => (
+          <div className="variable-reference-group" key={group.title}>
+            <span>{group.title}</span>
+            <div>
+              {group.columns.map((column) => (
+                <span className="variable-chip" key={`${group.title}-${column.name}`} title={`${column.name} · ${column.dtype}`}>
+                  {column.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
