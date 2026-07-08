@@ -67,6 +67,25 @@ import {
   SAMPLE_STATUS,
   type SampleStage
 } from "./sampleScenario";
+import {
+  COLUMN_RESIZER_WIDTH,
+  DEFAULT_PANEL_HEIGHTS,
+  MIN_LEFT_RAIL,
+  MIN_MAIN_RAIL,
+  MIN_RIGHT_RAIL,
+  clamp,
+  defaultPanelHeight,
+  fitRailWidths,
+  loadPanelHeights,
+  loadRailWidths,
+  panelMinHeight,
+  savePanelHeights,
+  saveRailWidths,
+  type PanelHeights,
+  type PanelId,
+  type RailId,
+  type RailWidths
+} from "./workbenchLayout";
 import type {
   ChatContext,
   ChatMessage,
@@ -84,41 +103,9 @@ const COLUMNS_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.columns}`;
 const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.dependentVariable}`;
 const INDEPENDENT_VARIABLES_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.independentVariables}`;
 const CHAT_PLACEHOLDER = "例如：为什么推荐这个模型？";
-const LAYOUT_WIDTHS_KEY = "econometrics-agent.layout-widths";
-const PANEL_HEIGHTS_KEY = "econometrics-agent.panel-heights";
-
-const DEFAULT_RAIL_WIDTHS = { left: 330, right: 360 };
-const MIN_LEFT_RAIL = 280;
-const MIN_MAIN_RAIL = 420;
-const MIN_RIGHT_RAIL = 320;
-const COLUMN_RESIZER_WIDTH = 12;
-const DEFAULT_PANEL_HEIGHTS = {
-  left: { data: 540, variables: 420, report: 310 },
-  main: { question: 220, profile: 300, path: 360, recommendation: 280, result: 280 },
-  right: { chat: 660 }
-};
-const PANEL_MIN_HEIGHTS = {
-  data: 360,
-  question: 170,
-  variables: 280,
-  report: 220,
-  profile: 220,
-  path: 240,
-  recommendation: 220,
-  result: 220,
-  chat: 360
-};
 type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
-type RailId = keyof typeof DEFAULT_PANEL_HEIGHTS;
-type PanelId = keyof typeof PANEL_MIN_HEIGHTS;
-type PanelHeights = Record<RailId, Partial<Record<PanelId, number>>>;
-
-interface RailWidths {
-  left: number;
-  right: number;
-}
 
 interface ResizeSession {
   edge: ResizeEdge;
@@ -172,82 +159,6 @@ const MODEL_OPTIONS = [
   { value: "RDD", label: "RDD 断点回归" },
   { value: "IV-2SLS", label: "IV-2SLS 工具变量" }
 ];
-
-function clamp(value: number, min: number, max: number): number {
-  const upper = Math.max(min, max);
-  return Math.min(Math.max(value, min), upper);
-}
-
-function readableWidth(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function fitRailWidths(widths: RailWidths, railSpace: number): RailWidths {
-  let left = Math.max(MIN_LEFT_RAIL, readableWidth(widths.left, DEFAULT_RAIL_WIDTHS.left));
-  let right = Math.max(MIN_RIGHT_RAIL, readableWidth(widths.right, DEFAULT_RAIL_WIDTHS.right));
-
-  if (!Number.isFinite(railSpace) || railSpace <= 0) {
-    return { left, right };
-  }
-
-  const sideSpace = railSpace - MIN_MAIN_RAIL;
-  if (sideSpace < MIN_LEFT_RAIL + MIN_RIGHT_RAIL) {
-    return { left: MIN_LEFT_RAIL, right: MIN_RIGHT_RAIL };
-  }
-
-  right = clamp(right, MIN_RIGHT_RAIL, sideSpace - MIN_LEFT_RAIL);
-  left = clamp(left, MIN_LEFT_RAIL, sideSpace - right);
-  return { left, right };
-}
-
-function loadRailWidths(): RailWidths {
-  try {
-    const raw = localStorage.getItem(LAYOUT_WIDTHS_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return fitRailWidths(
-      {
-        left: readableWidth(parsed.left, DEFAULT_RAIL_WIDTHS.left),
-        right: readableWidth(parsed.right, DEFAULT_RAIL_WIDTHS.right)
-      },
-      0
-    );
-  } catch {
-    return DEFAULT_RAIL_WIDTHS;
-  }
-}
-
-function panelMinHeight(panelId: PanelId): number {
-  return PANEL_MIN_HEIGHTS[panelId] ?? 180;
-}
-
-function defaultPanelHeight(rail: RailId, panelId: PanelId): number {
-  const defaults = DEFAULT_PANEL_HEIGHTS[rail] as Partial<Record<PanelId, number>>;
-  return defaults[panelId] ?? panelMinHeight(panelId);
-}
-
-function loadPanelHeights(): PanelHeights {
-  const heights: PanelHeights = { left: {}, main: {}, right: {} };
-
-  try {
-    const raw = localStorage.getItem(PANEL_HEIGHTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-
-    (Object.keys(DEFAULT_PANEL_HEIGHTS) as RailId[]).forEach((rail) => {
-      const defaults = DEFAULT_PANEL_HEIGHTS[rail] as Partial<Record<PanelId, number>>;
-      Object.keys(defaults).forEach((key) => {
-        const panelId = key as PanelId;
-        const value = parsed?.[rail]?.[panelId];
-        heights[rail][panelId] = Math.max(panelMinHeight(panelId), readableWidth(value, defaultPanelHeight(rail, panelId)));
-      });
-    });
-  } catch {
-    (Object.keys(DEFAULT_PANEL_HEIGHTS) as RailId[]).forEach((rail) => {
-      heights[rail] = { ...(DEFAULT_PANEL_HEIGHTS[rail] as Partial<Record<PanelId, number>>) };
-    });
-  }
-
-  return heights;
-}
 
 function splitList(value: string): string[] {
   return value
@@ -1105,17 +1016,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(LAYOUT_WIDTHS_KEY, JSON.stringify(railWidths));
-    } catch {
-    }
+    saveRailWidths(railWidths);
   }, [railWidths]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(PANEL_HEIGHTS_KEY, JSON.stringify(panelHeights));
-    } catch {
-    }
+    savePanelHeights(panelHeights);
   }, [panelHeights]);
 
   useEffect(() => {
