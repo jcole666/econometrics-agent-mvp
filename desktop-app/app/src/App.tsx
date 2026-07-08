@@ -82,6 +82,14 @@ const SAMPLE_SCENARIO = {
     ["smart_city_pilot", "智慧城市试点"]
   ] as Array<[string, string]>
 };
+const SAMPLE_STATUS = {
+  needsData: "先选择数据文件，或点击示例准备内置数据。",
+  recommending: "正在准备示例：生成模型推荐。",
+  running: "正在准备示例：运行模型。",
+  reporting: "正在准备示例：生成报告。",
+  ready: "示例已准备好：数据、推荐、结果和报告都已生成。",
+  failed: "示例数据加载失败。"
+};
 const QUESTION_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.question}`;
 const COLUMNS_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.columns}`;
 const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.dependentVariable}`;
@@ -1592,7 +1600,7 @@ export default function App() {
     if (target === "data") {
       setActiveStep(1);
       if (!file) {
-        setStatus("先选择数据文件，或点击示例准备内置数据。");
+        setStatus(SAMPLE_STATUS.needsData);
         return;
       }
       window.setTimeout(() => columnsInputRef.current?.focus(), 0);
@@ -1672,14 +1680,14 @@ export default function App() {
       const request = buildSampleRequest(sampleProfile);
 
       setSampleStage("recommend");
-      setStatus("正在准备示例：生成模型推荐。");
+      setStatus(SAMPLE_STATUS.recommending);
       const nextRecommendation = await recommendModel(request);
       const nextModel = nextRecommendation.model || SAMPLE_SCENARIO.modelType;
       setRecommendation(nextRecommendation);
       setModelType(nextModel);
 
       setSampleStage("run");
-      setStatus("正在准备示例：运行模型。");
+      setStatus(SAMPLE_STATUS.running);
       const nextRunResult = await runModel(sampleFile, request, nextModel);
       setRunResult(nextRunResult);
       setRunNotice(nextRunResult.success ? null : nextRunResult.error ?? "模型运行失败。");
@@ -1705,15 +1713,15 @@ export default function App() {
       });
 
       setSampleStage("report");
-      setStatus("正在准备示例：生成报告。");
+      setStatus(SAMPLE_STATUS.reporting);
       const nextReport = await generateReport(SAMPLE_SCENARIO.question, nextModel, nextRunResult.results, notes, { enabled: false });
       setReport(nextReport.markdown);
       setConfirmedCheckpoints(["question", "data", "variables", "recommendation"]);
       setSampleStage("ready");
-      setStatus("示例已准备好：数据、推荐、结果和报告都已生成。");
+      setStatus(SAMPLE_STATUS.ready);
     } catch (error) {
       setSampleStage("error");
-      setStatus(error instanceof Error ? error.message : "示例数据加载失败。");
+      setStatus(error instanceof Error ? error.message : SAMPLE_STATUS.failed);
     } finally {
       setBusy(null);
     }
@@ -1769,7 +1777,7 @@ export default function App() {
 
   async function run() {
     if (!file) {
-      const message = "请先选择数据文件，或点击示例准备内置数据。";
+      const message = SAMPLE_STATUS.needsData;
       setRunNotice(message);
       setStatus(message);
       return;
