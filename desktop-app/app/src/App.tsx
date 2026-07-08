@@ -41,6 +41,15 @@ import {
   runModel
 } from "./api";
 import {
+  DEFAULT_MODEL_SETTINGS,
+  loadModelSettings,
+  missingModelSettings,
+  resetModelSettings as clearStoredModelSettings,
+  saveModelSettings as saveStoredModelSettings,
+  toLLMConfig,
+  type ModelSettings
+} from "./modelSettings";
+import {
   buildSampleRequest,
   isSampleProfile,
   SAMPLE_PANEL_HEIGHTS,
@@ -55,7 +64,6 @@ import type {
   CoefficientResult,
   DataProfile,
   InferVariablesResponse,
-  LLMConfig,
   ModelRecommendation,
   ModelRequest,
   RelationshipHint,
@@ -67,7 +75,6 @@ const COLUMNS_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.columns}`;
 const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.dependentVariable}`;
 const INDEPENDENT_VARIABLES_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.independentVariables}`;
 const CHAT_PLACEHOLDER = "例如：为什么推荐这个模型？";
-const SETTINGS_KEY = "econometrics-agent.model-settings";
 const CHAT_SESSIONS_KEY = "econometrics-agent.chat-sessions";
 const ACTIVE_CHAT_KEY = "econometrics-agent.active-chat";
 const LAYOUT_WIDTHS_KEY = "econometrics-agent.layout-widths";
@@ -141,14 +148,6 @@ interface CollaborationCheckpoint {
   badge: string;
 }
 
-interface ModelSettings {
-  enabled: boolean;
-  baseUrl: string;
-  model: string;
-  apiKey: string;
-  timeout: string;
-}
-
 interface ChatSession {
   id: string;
   title: string;
@@ -178,29 +177,6 @@ const MODEL_OPTIONS = [
   { value: "RDD", label: "RDD 断点回归" },
   { value: "IV-2SLS", label: "IV-2SLS 工具变量" }
 ];
-
-const DEFAULT_MODEL_SETTINGS: ModelSettings = {
-  enabled: false,
-  baseUrl: "https://api.modelarts-maas.com/openai/v1",
-  model: "deepseek-v4-pro-IckBJP",
-  apiKey: "",
-  timeout: "60"
-};
-
-function loadModelSettings(): ModelSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_MODEL_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<ModelSettings>;
-    return {
-      ...DEFAULT_MODEL_SETTINGS,
-      ...parsed,
-      enabled: parsed.enabled === true
-    };
-  } catch {
-    return DEFAULT_MODEL_SETTINGS;
-  }
-}
 
 function clamp(value: number, min: number, max: number): number {
   const upper = Math.max(min, max);
@@ -276,21 +252,6 @@ function loadPanelHeights(): PanelHeights {
   }
 
   return heights;
-}
-
-function toLLMConfig(settings: ModelSettings): LLMConfig {
-  if (!settings.enabled) {
-    return { enabled: false };
-  }
-
-  const timeout = Number(settings.timeout);
-  return {
-    enabled: true,
-    api_key: settings.apiKey.trim() || null,
-    base_url: settings.baseUrl.trim() || null,
-    model: settings.model.trim() || null,
-    timeout: Number.isFinite(timeout) && timeout > 0 ? timeout : null
-  };
 }
 
 function splitList(value: string): string[] {
@@ -703,15 +664,6 @@ function buildChatContext({
     generated_code: recommendation?.generated_code ?? null,
     model_results: runResult?.results ?? null
   };
-}
-
-function missingModelSettings(settings: ModelSettings): string[] {
-  const missing: string[] = [];
-  if (!settings.enabled) missing.push("启用自定义模型");
-  if (!settings.baseUrl.trim()) missing.push("请求地址");
-  if (!settings.model.trim()) missing.push("模型名称");
-  if (!settings.apiKey.trim()) missing.push("API Key");
-  return missing;
 }
 
 function nextChatId(): string {
@@ -1427,13 +1379,13 @@ export default function App() {
 
   function saveModelSettings() {
     setModelSettings(settingsDraft);
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsDraft));
+    saveStoredModelSettings(settingsDraft);
     setSettingsOpen(false);
     setStatus(settingsDraft.enabled ? "模型配置已保存。" : "已切换为本地规则。");
   }
 
   function resetModelSettings() {
-    localStorage.removeItem(SETTINGS_KEY);
+    clearStoredModelSettings();
     setModelSettings(DEFAULT_MODEL_SETTINGS);
     setSettingsDraft(DEFAULT_MODEL_SETTINGS);
     setStatus("已恢复默认模型配置。");
