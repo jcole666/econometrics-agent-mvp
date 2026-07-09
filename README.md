@@ -17,7 +17,7 @@ Windows 用户直接下载最新版：
 校验值：
 
 ```text
-SHA256 2D29D185D3E8A1340C6937CD6EA8D236AB5FA0ECB15AE7E21CEFD14B609ADE1D
+SHA256 5B9D3C99D2DE9F6C4E7134242E2259038C2A0C818D7E4244AFAF92F5FAF21A73
 ```
 
 ## 直接打开
@@ -80,7 +80,7 @@ docs/           架构说明
 
 ```text
 小计.exe
-desktop-app\app\release\Econometrics-Agent-Workbench-0.5.0-portable.exe
+desktop-app\app\release\Econometrics-Agent-Workbench-0.6.0-portable.exe
 ```
 
 ## 开发
