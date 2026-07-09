@@ -4,20 +4,20 @@
 
 ## 下载发布版
 
-Windows 用户直接下载：
+Windows 用户直接下载最新版：
 
-[Xiaoji-v0.2.0.exe](https://github.com/jcole666/econometrics-agent-mvp/releases/download/v0.2.0/Xiaoji-v0.2.0.exe)
+[Econometrics-Agent-Workbench-0.4.0-portable.exe](https://github.com/jcole666/econometrics-agent-mvp/releases/download/v0.4.0/Econometrics-Agent-Workbench-0.4.0-portable.exe)
 
 下载后双击即可使用。第一次启动会自动拉起本地分析服务，可能需要等待十几秒。
 
-当前版本还没有做代码签名。如果 Windows 弹出安全提示，可以点“更多信息” -> “仍要运行”。
+当前版本还没有做代码签名。如果 Windows 弹出安全提示，可以点”更多信息” -> “仍要运行”。
 
-旧版本仍保留在 GitHub Releases 页面，可以按版本号下载。
+旧版本仍保留在 [GitHub Releases](https://github.com/jcole666/econometrics-agent-mvp/releases) 页面，可以按版本号下载。
 
 校验值：
 
 ```text
-SHA256 73BD52F3ABAAF9EBFD347C066DCB6A320F52CC5DA7A6A7A1EEE278129AB22C7D
+SHA256 267D3F12CAFA0AFE03CA4CB658BB491071E59ADCC10FA0D8261E23483D3B0B5B
 ```
 
 ## 直接打开
@@ -43,7 +43,7 @@ SHA256 73BD52F3ABAAF9EBFD347C066DCB6A320F52CC5DA7A6A7A1EEE278129AB22C7D
 原始打包产物仍保留在：
 
 ```text
-desktop-app\app\release\Econometrics-Agent-Workbench-0.2.0-portable.exe
+desktop-app\app\release\Econometrics-Agent-Workbench-0.4.0-portable.exe
 ```
 
 ## 快速体验
@@ -80,7 +80,7 @@ docs/           架构说明
 
 ```text
 小计.exe
-desktop-app\app\release\Econometrics-Agent-Workbench-0.2.0-portable.exe
+desktop-app\app\release\Econometrics-Agent-Workbench-0.4.0-portable.exe
 ```
 
 ## 开发
