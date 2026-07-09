@@ -24,7 +24,10 @@ def read_dataframe_bytes(content: bytes, filename: str) -> pd.DataFrame:
         if suffix.endswith((".xlsx", ".xls")):
             return pd.read_excel(io.BytesIO(content))
         if suffix.endswith(".csv") or not suffix:
-            return pd.read_csv(io.BytesIO(content))
+            try:
+                return pd.read_csv(io.BytesIO(content), encoding="utf-8-sig")
+            except UnicodeDecodeError:
+                return pd.read_csv(io.BytesIO(content))
     except Exception as exc:
         raise ValueError("无法读取数据文件，请上传有效的 CSV 或 Excel 文件。") from exc
 

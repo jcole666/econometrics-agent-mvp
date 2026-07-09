@@ -71,7 +71,7 @@ async def profile_data(file: UploadFile = File(...)) -> dict:
 
 @app.get("/sample-profile")
 def sample_profile() -> dict:
-    df = pd.read_csv(SAMPLE_DATA_PATH)
+    df = pd.read_csv(SAMPLE_DATA_PATH, encoding="utf-8-sig")
     return profile_dataframe(df)
 
 
