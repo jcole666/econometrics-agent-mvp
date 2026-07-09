@@ -6,7 +6,7 @@
 
 Windows 用户直接下载最新版：
 
-[Econometrics-Agent-Workbench-0.5.0-portable.exe](https://github.com/jcole666/econometrics-agent-mvp/releases/download/v0.5.0/Econometrics-Agent-Workbench-0.5.0-portable.exe)
+[Econometrics-Agent-Workbench-0.6.0-portable.exe](https://github.com/jcole666/econometrics-agent-mvp/releases/download/v0.6.0/Econometrics-Agent-Workbench-0.6.0-portable.exe)
 
 下载后双击即可使用。第一次启动会自动拉起本地分析服务，可能需要等待十几秒。
 
@@ -17,7 +17,7 @@ Windows 用户直接下载最新版：
 校验值：
 
 ```text
-SHA256 2FE6B580FEC1B6FAFCEE6AB095663100DF2A0F03F81131986BA0E5E0C8D9EC57
+SHA256 2D29D185D3E8A1340C6937CD6EA8D236AB5FA0ECB15AE7E21CEFD14B609ADE1D
 ```
 
 ## 直接打开

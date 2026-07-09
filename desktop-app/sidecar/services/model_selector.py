@@ -17,7 +17,7 @@ def select_model(request: ModelRequest) -> tuple[str, str, list[str]]:
         return (
             "RDD",
             "研究问题涉及断点、阈值或 cutoff。优先按 RDD 整理识别策略，但需要把断点附近的样本连续性、操纵检验和带宽选择讲清楚。",
-            ["确认 running variable 与 cutoff", "检查断点两侧样本量和协变量连续性", "比较不同带宽和多项式阶数", "替代模型：局部线性回归或安慰剂断点"],
+            ["确认执行变量与断点", "检查断点两侧样本量和协变量连续性", "比较不同带宽和多项式阶数", "替代模型：局部线性回归或安慰剂断点"],
         )
 
     if (treatment_column and time_column and _has_any(text, ["did", "difference in differences", "policy", "pilot", "before and after", "treated", "control group", "双重差分", "政策", "试点", "处理组", "对照组"])) or _has_any(

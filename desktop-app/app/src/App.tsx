@@ -58,6 +58,7 @@ import {
 } from "./modelSettings";
 import { ChatMessageBody, MarkdownBody, ThinkingMessage } from "./markdown";
 import { saveReportMarkdown, saveReportPdf } from "./reportExport";
+import { dtypeLabel } from "./dtypeLabel";
 import {
   buildSampleRequest,
   isSampleProfile,
@@ -188,7 +189,12 @@ function hasNumber(value: number | null | undefined): value is number {
 }
 
 function isIntercept(variable: string): boolean {
-  return ["const", "constant", "intercept", "截距"].includes(variable.trim().toLowerCase());
+  return variable.trim().toLowerCase() === "const";
+}
+
+function translateVariable(variable: string): string {
+  if (variable.trim().toLowerCase() === "const") return "截距";
+  return variable;
 }
 
 function coefficientDirection(value: number | null | undefined): string {
@@ -240,7 +246,7 @@ function firstExistingColumn(profile: DataProfile, names: string[]): string | nu
 
 function fallbackOutcome(profile: DataProfile): string {
   return (
-    firstExistingColumn(profile, ["创新指数", "income", "employment", "gdp", "score"]) ??
+    firstExistingColumn(profile, ["创新指数", "收入", "就业率", "gdp", "得分"]) ??
     profile.columns.find((column) => column.kind === "数值")?.name ??
     SAMPLE_SCENARIO.dependentVariable
   );
@@ -2238,7 +2244,7 @@ function VariableColumnReference({ profile }: { profile: DataProfile | null }) {
   }
 
   const numericColumns = profile.columns.filter((column) => (
-    column.kind === "numeric" || /int|float|double|number|decimal/i.test(column.dtype)
+    column.kind === "数值" || /int|float|double|number|decimal/i.test(column.dtype)
   ));
   const entityNames = new Set([
     ...(profile.diagnostics?.possible_entity_columns ?? []),
@@ -2269,7 +2275,7 @@ function VariableColumnReference({ profile }: { profile: DataProfile | null }) {
             <span>{group.title}</span>
             <div>
               {group.columns.map((column) => (
-                <span className="variable-chip" key={`${group.title}-${column.name}`} title={`${column.name} · ${column.dtype}`}>
+                <span className="variable-chip" key={`${group.title}-${column.name}`} title={`${column.name} · ${dtypeLabel(column.dtype)}`}>
                   {column.name}
                 </span>
               ))}
@@ -2420,7 +2426,7 @@ function ProfileTable({ profile }: { profile: DataProfile | null }) {
               <tr key={column.name}>
                 <td title={column.name}>{column.name}</td>
                 <td>{column.kind ?? "未知"}</td>
-                <td>{column.dtype}</td>
+                <td>{dtypeLabel(column.dtype)}</td>
                 <td>{column.missing}</td>
                 <td>{formatPercent(column.missing_rate)}</td>
                 <td>{column.unique}</td>
@@ -2873,7 +2879,7 @@ function CoefficientTable({ coefficients }: { coefficients: CoefficientResult[] 
       <tbody>
         {coefficients.map((item) => (
           <tr key={item.variable}>
-            <td>{item.variable}</td>
+            <td>{translateVariable(item.variable)}</td>
             <td>{formatNumber(item.coefficient)}</td>
             <td>{formatNumber(item.std_error)}</td>
             <td>{formatNumber(item.t_statistic)}</td>

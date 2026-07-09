@@ -56,7 +56,7 @@ def _results_summary(model_type: str, results: dict[str, Any]) -> str:
         significant = _significant_coefficients(coefficients)
         if significant:
             items = [
-                f"{item.get('variable', '')}（{_direction(item.get('coefficient'))}，p={_fmt(item.get('p_value'))}）"
+                f"{_translate_variable(item.get('variable', ''))}（{_direction(item.get('coefficient'))}，p={_fmt(item.get('p_value'))}）"
                 for item in significant
             ]
             lines.append(f"- 5% 水平显著项：{'；'.join(items)}")
@@ -69,7 +69,7 @@ def _results_summary(model_type: str, results: dict[str, Any]) -> str:
         for item in coefficients:
             lines.append(
                 "| {variable} | {coef} | {std} | {stat} | {p} |".format(
-                    variable=item.get("variable", ""),
+                    variable=_translate_variable(item.get("variable", "")),
                     coef=_fmt(item.get("coefficient")),
                     std=_fmt(item.get("std_error")),
                     stat=_fmt(item.get("t_statistic")),
@@ -86,7 +86,7 @@ def _model_notes(model_type: str) -> str:
         "OLS": "建议继续检查缺失值、多重共线性、异常值，并优先报告稳健标准误。",
         "Logit": "建议检查 Y 是否确实为 0/1、类别是否严重不平衡，并在解释时关注边际效应。",
         "DID": "建议补充处理组、政策后变量、平行趋势检验和聚类稳健标准误。",
-        "RDD": "建议补充 running variable、cutoff、带宽选择和断点操纵检验。",
+        "RDD": "建议补充执行变量、断点、带宽选择和断点操纵检验。",
         "IV-2SLS": "建议补充第一阶段强度、工具变量相关性和排除限制论证。",
         "Panel Fixed Effects": "建议确认个体/时间索引，并选择合适的协方差估计方式。",
     }
@@ -117,7 +117,7 @@ def _significant_coefficients(coefficients: list[dict[str, Any]]) -> list[dict[s
 
 
 def _coefficient_sentence(item: dict[str, Any]) -> str:
-    variable = item.get("variable", "")
+    variable = _translate_variable(item.get("variable", ""))
     coefficient = item.get("coefficient")
     p_value = item.get("p_value")
     return f"{variable} 为{_direction(coefficient)}，系数 {_fmt(coefficient)}，{_significance(p_value)}。"
@@ -156,6 +156,12 @@ def _significance(value: Any) -> str:
 
 def _is_intercept(value: Any) -> bool:
     return str(value or "").strip().lower() in {"const", "constant", "intercept", "截距"}
+
+def _translate_variable(name: str) -> str:
+    """将 statsmodels 内部名称转为中文显示名。"""
+    if name.strip().lower() in {"const", "constant", "intercept"}:
+        return "截距"
+    return name
 
 
 def _as_float(value: Any) -> float | None:

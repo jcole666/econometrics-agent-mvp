@@ -234,7 +234,7 @@ def _relationship_hints(df: pd.DataFrame, time_candidates: list[str]) -> list[di
             {
                 "left": str(left),
                 "right": str(right),
-                "method": "Pearson",
+                "method": "皮尔逊",
                 "score": round(float(score), 3),
                 "direction": "正相关" if score > 0 else "负相关",
                 "note": _relationship_note(float(score)),
