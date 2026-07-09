@@ -29,7 +29,7 @@ scripts/      构建脚本
 打包流程会先确认 sidecar exe，再构建 Electron portable 应用。输出位置：
 
 ```text
-app\release\Econometrics-Agent-Workbench-0.2.0-portable.exe
+app\release\Econometrics-Agent-Workbench-0.4.0-portable.exe
 ```
 
 需要强制重建 sidecar 时：

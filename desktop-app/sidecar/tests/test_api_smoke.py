@@ -28,7 +28,7 @@ def test_sample_profile_includes_diagnostics() -> None:
     assert response.status_code == 200
     body = response.json()
     diagnostics = body["diagnostics"]
-    assert body["rows"] == 48
+    assert body["rows"] == 126
     assert diagnostics["duplicate_rows"] == 0
     assert "year" in diagnostics["possible_time_columns"]
     assert "city" in diagnostics["possible_entity_columns"]
@@ -108,7 +108,7 @@ def test_chat_context_keeps_analysis_fields() -> None:
         message="怎么看关系线索？",
         context={
             "data_columns": ["innovation_index", "digital_economy_index"],
-            "data_summary": "48 行；13 列；平衡面板",
+            "data_summary": "126 行；13 列；平衡面板",
             "relationship_hints": [
                 {"left": "innovation_index", "right": "digital_economy_index", "score": 0.994, "direction": "正相关"}
             ],
@@ -119,7 +119,7 @@ def test_chat_context_keeps_analysis_fields() -> None:
 
     context = _dump_context(request)
 
-    assert context["data_summary"] == "48 行；13 列；平衡面板"
+    assert context["data_summary"] == "126 行；13 列；平衡面板"
     assert context["relationship_hints"][0]["left"] == "innovation_index"
     assert context["research_path"]["model"] == "Panel Fixed Effects"
 
@@ -160,7 +160,7 @@ def test_panel_fixed_effects_runner_returns_coefficients() -> None:
     body = response.json()
     assert body["success"] is True
     assert body["model_type"] == "Panel Fixed Effects"
-    assert body["results"]["sample_size"] == 48
+    assert body["results"]["sample_size"] == 126
     assert any(item["variable"] == "digital_economy_index" for item in body["results"]["coefficients"])
     assert any("固定效应" in item for item in body["warnings"])
 
