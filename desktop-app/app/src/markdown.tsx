@@ -262,7 +262,8 @@ export function MarkdownBody({ value, className = "chat-markdown" }: { value: st
       {blocks.map((block, index) => {
         if (block.kind === "heading") {
           const levelClass = block.level <= 2 ? "chat-heading-main" : "chat-heading";
-          return <h3 className={levelClass} key={index}>{renderInline(block.text)}</h3>;
+          const slug = block.text.replace(/[^一-龥a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+          return <h3 className={levelClass} key={index} id={`report-h-${slug}`}>{renderInline(block.text)}</h3>;
         }
         if (block.kind === "list") {
           return (

@@ -603,6 +603,7 @@ export default function App() {
   const [showReportPage, setShowReportPage] = useState(false);
   const [showGuideDrawer, setShowGuideDrawer] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [reportAiOpen, setReportAiOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
@@ -1036,6 +1037,15 @@ export default function App() {
     window.setTimeout(() => questionInputRef.current?.focus(), 0);
   }
 
+  function confirmRecommendation() {
+    if (!recommendation) return;
+    setConfirmedCheckpoints((current) => {
+      const withoutRec = current.filter((id) => id !== "recommendation");
+      return [...withoutRec, "recommendation"];
+    });
+    setStatus("已确认模型推荐。");
+  }
+
   function toggleCheckpoint(id: string) {
     setConfirmedCheckpoints((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
@@ -1454,10 +1464,16 @@ export default function App() {
                   <nav>
                     {report.split("\n").filter((line) => /^#{1,4}\s/.test(line)).map((line, i) => {
                       const level = line.match(/^(#{1,4})\s/)?.[1]?.length ?? 1;
+                      const title = line.replace(/^#{1,4}\s/, "");
+                      const slug = title.replace(/[^一-龥a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
                       return (
-                        <a key={i} style={{ paddingLeft: (level - 1) * 12 }}>
+                        <a key={i} style={{ paddingLeft: (level - 1) * 12 }} href={`#report-h-${slug}`} onClick={(e) => {
+                          e.preventDefault();
+                          const el = document.getElementById(`report-h-${slug}`);
+                          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}>
                           <span>{i + 1}</span>
-                          {line.replace(/^#{1,4}\s/, "")}
+                          {title}
                         </a>
                       );
                     })}
@@ -1473,18 +1489,58 @@ export default function App() {
                   <div className="report report-empty">尚未生成报告。点击上方"生成/刷新报告"开始。</div>
                 )}
               </section>
-              <aside className="report-ai-tools">
+              <aside className="report-ai-tools" style={reportAiOpen ? { flex: 1 } : undefined}>
                 <h3>AI 辅助润色</h3>
-                {report.trim() ? (
-                  <>
-                    <p className="report-ai-head">选择报告段落后，可以在这里让 AI 帮你润色表达、调整结构或补充说明。</p>
-                    <button className="secondary wide" type="button" onClick={() => { setShowReportPage(false); setShowChat(true); }} disabled={isWorking}>
-                      <MessageSquare size={16} />
-                      <span>打开小计对话润色</span>
-                    </button>
-                  </>
+                {reportAiOpen ? (
+                  <div className="report-chat-embedded" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, gap: 8 }}>
+                    <div className="chat-tools">
+                      <button className="secondary chat-new-button" type="button" onClick={newChat} title="新建会话">
+                        <Plus size={15} />
+                        <span>新会话</span>
+                      </button>
+                      <button className="secondary" type="button" onClick={() => setReportAiOpen(false)} title="收起对话">
+                        <Minimize2 size={15} />
+                        <span>收起</span>
+                      </button>
+                    </div>
+                    <div className="chat-log" ref={chatLogRef} style={{ flex: "1 1 0", minHeight: 120 }}>
+                      {chatHistory.length === 0 ? <div className="empty">在这里和小计讨论报告润色。</div> : null}
+                      {chatHistory.map((item, index) => (
+                        <div className={`chat-item chat-${item.role}`} key={`${item.role}-${index}`}>
+                          <strong>{item.role === "user" ? "我" : "小计"}</strong>
+                          <ChatMessageBody message={item} />
+                        </div>
+                      ))}
+                      {busy === "chat" && pendingChatId === currentChat?.id ? <ThinkingMessage /> : null}
+                    </div>
+                    <div className="send-row" style={{ marginTop: 0 }}>
+                      <input
+                        ref={chatInputRef}
+                        className="chat-input"
+                        value={chatInput}
+                        placeholder="输入润色指令..."
+                        onChange={(event) => setChatInput(event.target.value)}
+                        onKeyDown={(event) => event.key === "Enter" && sendChat()}
+                      />
+                      <button type="button" onClick={sendChat} disabled={busy === "chat"} title="发送">
+                        <Send size={16} />
+                      </button>
+                    </div>
+                  </div>
                 ) : (
-                  <p className="report-ai-head">生成报告后可以使用 AI 辅助润色。</p>
+                  <>
+                    {report.trim() ? (
+                      <>
+                        <p className="report-ai-head">选择报告段落后，可以在这里让 AI 帮你润色表达、调整结构或补充说明。</p>
+                        <button className="secondary wide" type="button" onClick={() => setReportAiOpen(true)}>
+                          <MessageSquare size={16} />
+                          <span>打开小计对话润色</span>
+                        </button>
+                      </>
+                    ) : (
+                      <p className="report-ai-head">生成报告后可以使用 AI 辅助润色。</p>
+                    )}
+                  </>
                 )}
               </aside>
             </div>
@@ -1668,6 +1724,15 @@ export default function App() {
                             <option key={item.value} value={item.value}>{item.label}</option>
                           ))}
                         </select>
+                        <button type="button" onClick={recommend} disabled={isWorking}>
+                          <Sparkles size={16} />
+                          <span>推荐模型</span>
+                        </button>
+                        {recommendation && !confirmedCheckpoints.includes("recommendation") ? (
+                          <button type="button" onClick={confirmRecommendation} title="确认此模型推荐">
+                            确认 ✓
+                          </button>
+                        ) : null}
                         <button type="button" onClick={run} disabled={isWorking}>
                           <Play size={16} />
                           <span>运行模型</span>
