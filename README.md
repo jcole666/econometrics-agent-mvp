@@ -43,7 +43,7 @@ SHA256 9893534ECC6918AE5BB4783F10D448CF039F6212057B75225F78F9F6E3F34B8C
 原始打包产物仍保留在：
 
 ```text
-desktop-app\app\release\Econometrics-Agent-Workbench-0.5.0-portable.exe
+desktop-app\app\release\Econometrics-Agent-Workbench-0.6.2-portable.exe
 ```
 
 ## 快速体验
