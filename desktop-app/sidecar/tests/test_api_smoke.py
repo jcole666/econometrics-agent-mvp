@@ -30,27 +30,27 @@ def test_sample_profile_includes_diagnostics() -> None:
     diagnostics = body["diagnostics"]
     assert body["rows"] == 126
     assert diagnostics["duplicate_rows"] == 0
-    assert "year" in diagnostics["possible_time_columns"]
-    assert "city" in diagnostics["possible_entity_columns"]
-    assert diagnostics["panel_hint"]["entity_column"] == "city"
-    assert diagnostics["panel_hint"]["time_column"] == "year"
+    assert "年份" in diagnostics["possible_time_columns"]
+    assert "城市" in diagnostics["possible_entity_columns"]
+    assert diagnostics["panel_hint"]["entity_column"] == "城市"
+    assert diagnostics["panel_hint"]["time_column"] == "年份"
     assert diagnostics["panel_hint"]["is_balanced"] is True
     assert diagnostics["relationship_hints"]
     assert any(
-        {hint["left"], hint["right"]} == {"innovation_index", "digital_economy_index"}
+        {hint["left"], hint["right"]} == {"创新指数", "数字经济发展指数"}
         for hint in diagnostics["relationship_hints"]
     )
 
 
 def test_variable_inference_for_city_panel_question() -> None:
     payload = {
-        "research_question": "Does the digital economy improve urban innovation?",
+        "research_question": "数字经济发展是否会提升城市创新水平？",
         "columns": [
-            {"name": "city", "dtype": "object", "sample_values": ["Shanghai", "Suzhou"]},
-            {"name": "year", "dtype": "int64", "sample_values": ["2018", "2019"]},
-            {"name": "innovation_index", "dtype": "float64", "sample_values": ["82.3", "84.1"]},
-            {"name": "digital_economy_index", "dtype": "float64", "sample_values": ["78.6", "80.4"]},
-            {"name": "fiscal_science_spending", "dtype": "float64", "sample_values": ["5.8", "6.0"]},
+            {"name": "城市", "dtype": "object", "sample_values": ["上海", "苏州"]},
+            {"name": "年份", "dtype": "int64", "sample_values": ["2018", "2019"]},
+            {"name": "创新指数", "dtype": "float64", "sample_values": ["82.3", "84.1"]},
+            {"name": "数字经济发展指数", "dtype": "float64", "sample_values": ["78.6", "80.4"]},
+            {"name": "财政科技支出", "dtype": "float64", "sample_values": ["5.8", "6.0"]},
         ],
     }
 
@@ -58,18 +58,18 @@ def test_variable_inference_for_city_panel_question() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["dependent_variable"] == "innovation_index"
-    assert body["entity_column"] == "city"
-    assert body["time_column"] == "year"
-    assert "digital_economy_index" in body["independent_variables"]
+    assert body["dependent_variable"] == "创新指数"
+    assert body["entity_column"] == "城市"
+    assert body["time_column"] == "年份"
+    assert "数字经济发展指数" in body["independent_variables"]
 
 
 def test_disabled_llm_config_uses_rules() -> None:
     payload = {
-        "research_question": "Does the digital economy improve urban innovation?",
-        "columns": ["city", "year", "innovation_index", "digital_economy_index", "human_capital"],
-        "dependent_variable": "innovation_index",
-        "independent_variables": ["digital_economy_index", "human_capital"],
+        "research_question": "数字经济发展是否会提升城市创新水平？",
+        "columns": ["城市", "年份", "创新指数", "数字经济发展指数", "人力资本"],
+        "dependent_variable": "创新指数",
+        "independent_variables": ["数字经济发展指数", "人力资本"],
         "llm_config": {"enabled": False},
     }
 
@@ -80,8 +80,8 @@ def test_disabled_llm_config_uses_rules() -> None:
     assert body["provider"] == "rules"
     assert body["maas_used"] is False
     assert body["model"] == "Panel Fixed Effects"
-    assert "city" in body["reason"]
-    assert "year" in body["reason"]
+    assert "城市" in body["reason"]
+    assert "年份" in body["reason"]
     assert any("固定效应" in item for item in body["required_checks"])
 
 
@@ -107,10 +107,10 @@ def test_chat_context_keeps_analysis_fields() -> None:
     request = ChatRequest(
         message="怎么看关系线索？",
         context={
-            "data_columns": ["innovation_index", "digital_economy_index"],
+            "data_columns": ["创新指数", "数字经济发展指数"],
             "data_summary": "126 行；13 列；平衡面板",
             "relationship_hints": [
-                {"left": "innovation_index", "right": "digital_economy_index", "score": 0.994, "direction": "正相关"}
+                {"left": "创新指数", "right": "数字经济发展指数", "score": 0.994, "direction": "正相关"}
             ],
             "research_path": {"model": "Panel Fixed Effects", "risks": ["相关关系不等于因果关系"]},
         },
@@ -120,7 +120,7 @@ def test_chat_context_keeps_analysis_fields() -> None:
     context = _dump_context(request)
 
     assert context["data_summary"] == "126 行；13 列；平衡面板"
-    assert context["relationship_hints"][0]["left"] == "innovation_index"
+    assert context["relationship_hints"][0]["left"] == "创新指数"
     assert context["research_path"]["model"] == "Panel Fixed Effects"
 
 
@@ -131,8 +131,8 @@ def test_ols_runner_returns_coefficients() -> None:
             files={"file": ("sample_city_panel.csv", handle, "text/csv")},
             data={
                 "model_type": "OLS",
-                "dependent_variable": "innovation_index",
-                "independent_variables": "digital_economy_index,broadband_access,fiscal_science_spending,human_capital,industrial_upgrade,population_density",
+                "dependent_variable": "创新指数",
+                "independent_variables": "数字经济发展指数,宽带接入率,财政科技支出,人力资本,产业结构升级,人口密度",
             },
         )
 
@@ -149,10 +149,10 @@ def test_panel_fixed_effects_runner_returns_coefficients() -> None:
             files={"file": ("sample_city_panel.csv", handle, "text/csv")},
             data={
                 "model_type": "Panel Fixed Effects",
-                "dependent_variable": "innovation_index",
-                "independent_variables": "digital_economy_index,broadband_access,fiscal_science_spending,human_capital,industrial_upgrade,population_density",
-                "entity_column": "city",
-                "time_column": "year",
+                "dependent_variable": "创新指数",
+                "independent_variables": "数字经济发展指数,宽带接入率,财政科技支出,人力资本,产业结构升级,人口密度",
+                "entity_column": "城市",
+                "time_column": "年份",
             },
         )
 
@@ -161,7 +161,7 @@ def test_panel_fixed_effects_runner_returns_coefficients() -> None:
     assert body["success"] is True
     assert body["model_type"] == "Panel Fixed Effects"
     assert body["results"]["sample_size"] == 126
-    assert any(item["variable"] == "digital_economy_index" for item in body["results"]["coefficients"])
+    assert any(item["variable"] == "数字经济发展指数" for item in body["results"]["coefficients"])
     assert any("固定效应" in item for item in body["warnings"])
 
 
@@ -172,8 +172,8 @@ def test_unsupported_complex_model_returns_business_error() -> None:
             files={"file": ("sample_city_panel.csv", handle, "text/csv")},
             data={
                 "model_type": "RDD",
-                "dependent_variable": "innovation_index",
-                "independent_variables": "digital_economy_index,human_capital",
+                "dependent_variable": "创新指数",
+                "independent_variables": "数字经济发展指数,人力资本",
             },
         )
 
@@ -190,7 +190,7 @@ def test_report_includes_analysis_notes() -> None:
             "research_question": "数字经济发展是否会提升城市创新水平？",
             "model_type": "Panel Fixed Effects",
             "model_results": None,
-            "inference_notes": "- 关系线索：innovation_index 与 digital_economy_index 正相关。",
+            "inference_notes": "- 关系线索：创新指数 与 数字经济发展指数 正相关。",
             "llm_config": {"enabled": False},
         },
     )
@@ -213,14 +213,14 @@ def test_report_interprets_model_results() -> None:
                 "r_squared_adjusted": 0.76,
                 "coefficients": [
                     {
-                        "variable": "digital_economy_index",
+                        "variable": "数字经济发展指数",
                         "coefficient": 0.42,
                         "std_error": 0.12,
                         "t_statistic": 3.5,
                         "p_value": 0.004,
                     },
                     {
-                        "variable": "human_capital",
+                        "variable": "人力资本",
                         "coefficient": 0.08,
                         "std_error": 0.06,
                         "t_statistic": 1.3,
@@ -234,6 +234,6 @@ def test_report_interprets_model_results() -> None:
 
     assert response.status_code == 200
     markdown = response.json()["markdown"]
-    assert "核心变量：digital_economy_index 为正向" in markdown
-    assert "5% 水平显著项：digital_economy_index" in markdown
+    assert "核心变量：数字经济发展指数 为正向" in markdown
+    assert "5% 水平显著项：数字经济发展指数" in markdown
     assert "解释边界：固定效应" in markdown

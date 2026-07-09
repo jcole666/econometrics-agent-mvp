@@ -2,11 +2,11 @@ import type { DataProfile, ModelRequest } from "./types";
 
 export const SAMPLE_SCENARIO = {
   question: "数字经济发展是否会提升城市创新水平？",
-  columns: "city, province, region, year, innovation_index, digital_economy_index, broadband_access, fiscal_science_spending, human_capital, industrial_upgrade, population_density, smart_city_pilot, green_patent_share",
-  dependentVariable: "innovation_index",
-  independentVariables: "digital_economy_index, broadband_access, fiscal_science_spending, human_capital, industrial_upgrade, population_density",
-  entityColumn: "city",
-  timeColumn: "year",
+  columns: "城市, 省份, 区域, 年份, 创新指数, 数字经济发展指数, 宽带接入率, 财政科技支出, 人力资本, 产业结构升级, 人口密度, 智慧城市试点, 绿色专利占比",
+  dependentVariable: "创新指数",
+  independentVariables: "数字经济发展指数, 宽带接入率, 财政科技支出, 人力资本, 产业结构升级, 人口密度",
+  entityColumn: "城市",
+  timeColumn: "年份",
   modelType: "Panel Fixed Effects",
   brief: {
     title: "城市面板",
@@ -20,13 +20,15 @@ export const SAMPLE_SCENARIO = {
     "最后查看模型推荐、运行结果和报告草稿。"
   ],
   fields: [
-    ["innovation_index", "城市创新水平"],
-    ["digital_economy_index", "数字经济发展水平"],
-    ["broadband_access", "数字基础设施"],
-    ["fiscal_science_spending", "财政科技支出"],
-    ["human_capital", "人力资本"],
-    ["industrial_upgrade", "产业结构升级"],
-    ["smart_city_pilot", "智慧城市试点"]
+    ["创新指数", "被解释变量（Y）：城市创新水平"],
+    ["数字经济发展指数", "核心解释变量：数字经济发展水平"],
+    ["宽带接入率", "控制变量：数字基础设施"],
+    ["财政科技支出", "控制变量：财政科技投入强度"],
+    ["人力资本", "控制变量：人力资本水平"],
+    ["产业结构升级", "控制变量：产业结构升级程度"],
+    ["人口密度", "控制变量：人口集聚程度"],
+    ["智慧城市试点", "控制变量：是否试点城市（0/1）"],
+    ["绿色专利占比", "辅助变量：绿色专利占比"]
   ] as Array<[string, string]>
 };
 
@@ -61,7 +63,7 @@ export function isSampleProfile(profile: DataProfile | null): boolean {
   const names = new Set(profile.columns.map((column) => column.name));
   return (
     names.has(SAMPLE_SCENARIO.dependentVariable) &&
-    names.has("digital_economy_index") &&
+    names.has("数字经济发展指数") &&
     names.has(SAMPLE_SCENARIO.entityColumn) &&
     names.has(SAMPLE_SCENARIO.timeColumn)
   );

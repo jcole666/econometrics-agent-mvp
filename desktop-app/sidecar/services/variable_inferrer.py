@@ -160,7 +160,7 @@ def _is_obvious_identifier(name: str, lowered: str) -> bool:
         lowered == "id"
         or lowered.endswith("_id")
         or lowered.endswith("_code")
-        or lowered in {"uuid", "index", "编号", "city", "province", "region"}
+        or lowered in {"uuid", "index", "编号", "city", "province", "region", "城市", "省份", "区域"}
     )
 
 

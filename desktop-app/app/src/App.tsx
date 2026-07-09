@@ -240,7 +240,7 @@ function firstExistingColumn(profile: DataProfile, names: string[]): string | nu
 
 function fallbackOutcome(profile: DataProfile): string {
   return (
-    firstExistingColumn(profile, ["innovation_index", "income", "employment", "gdp", "score"]) ??
+    firstExistingColumn(profile, ["创新指数", "income", "employment", "gdp", "score"]) ??
     profile.columns.find((column) => column.kind === "数值")?.name ??
     SAMPLE_SCENARIO.dependentVariable
   );
@@ -248,13 +248,13 @@ function fallbackOutcome(profile: DataProfile): string {
 
 function fallbackCoreVariables(profile: DataProfile, outcome: string): string[] {
   const preferred = [
-    "digital_economy_index",
-    "broadband_access",
-    "fiscal_science_spending",
-    "human_capital",
-    "industrial_upgrade",
-    "population_density",
-    "smart_city_pilot",
+    "数字经济发展指数",
+    "宽带接入率",
+    "财政科技支出",
+    "人力资本",
+    "产业结构升级",
+    "人口密度",
+    "智慧城市试点",
   ];
   const picked = preferred.filter((name) => profile.columns.some((column) => column.name === name && name !== outcome));
   if (picked.length) return picked;
@@ -266,7 +266,7 @@ function fallbackCoreVariables(profile: DataProfile, outcome: string): string[] 
 }
 
 function questionCandidates(profile: DataProfile, outcome: string, coreVariables: string[]): string[] {
-  const hasCityDemo = Boolean(firstExistingColumn(profile, ["digital_economy_index"])) && outcome === "innovation_index";
+  const hasCityDemo = Boolean(firstExistingColumn(profile, ["数字经济发展指数"])) && outcome === "创新指数";
   if (hasCityDemo) {
     return [
       "数字经济发展是否会提升城市创新水平？",

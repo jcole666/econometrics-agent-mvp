@@ -78,7 +78,7 @@ def _ratio(numerator: int | float, denominator: int | float) -> float:
 
 
 def _time_candidates(df: pd.DataFrame) -> list[str]:
-    keywords = ("year", "time", "date", "month", "quarter", "年份", "时间", "日期", "月份", "季度")
+    keywords = ("year", "time", "date", "month", "quarter", "年份", "时间", "日期", "月份", "季度", "年")
     found: list[str] = []
     for name in df.columns:
         lowered = str(name).lower()
@@ -108,6 +108,7 @@ def _entity_candidates(df: pd.DataFrame, time_candidates: list[str]) -> list[str
         "城市",
         "省份",
         "地区",
+        "区域",
         "个体",
         "企业",
         "公司",
@@ -204,7 +205,7 @@ def _modeling_warnings(df: pd.DataFrame) -> list[dict]:
             warnings.append({"name": label, "reason": "有效取值过少，无法提供解释变化"})
         if unique >= max(10, rows * 0.9) and (not pd_types.is_numeric_dtype(series) or any(key in lowered for key in ("id", "index", "code", "编号"))):
             warnings.append({"name": label, "reason": "唯一值接近样本量，可能是 ID 或索引列"})
-        if not pd_types.is_numeric_dtype(series) and any(key in lowered for key in ("city", "province", "region", "城市", "省份", "地区")):
+        if not pd_types.is_numeric_dtype(series) and any(key in lowered for key in ("city", "province", "region", "城市", "省份", "地区", "区域")):
             warnings.append({"name": label, "reason": "地区标识更适合做固定效应、分组或虚拟变量"})
     return warnings
 
