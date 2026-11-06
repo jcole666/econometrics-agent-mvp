@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
+
+
+def _now_iso() -> str:
+    """带本地时区偏移的 ISO-8601 时间串，便于前端直接展示。"""
+    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 class LLMConfig(BaseModel):
@@ -132,3 +139,228 @@ class ReportRequest(BaseModel):
 
 class ReportResponse(BaseModel):
     markdown: str
+
+
+# ---------------------------------------------------------------------------
+# 变量字典：与「建模角色推断」(/infer-variables) 并存，只描述列的语义元数据。
+# 字段名冻结，后续阶段只增不改名。
+# ---------------------------------------------------------------------------
+
+
+class VariableDictEntry(BaseModel):
+    column: str
+    label: str | None = None
+    description: str | None = None
+    type: str = Field("unknown", description="numeric/category/binary/datetime/text/unknown")
+    unit: str | None = None
+    value_labels: dict[str, str] = Field(default_factory=dict)
+    confidence: float | None = None
+    confirmed: bool = False
+    source: str = Field("ai", description="ai/user/mixed")
+    updated_at: str = Field(default_factory=lambda: _now_iso())
+
+
+class VariableDictionary(BaseModel):
+    dataset_id: str
+    dataset_hash: str = ""
+    entries: dict[str, VariableDictEntry] = Field(default_factory=dict)
+    version: int = 1
+
+
+class VariableDictInferRequest(BaseModel):
+    research_question: str = ""
+    dataset_id: str
+    dataset_hash: str = ""
+    columns: list[dict] = Field(default_factory=list)
+    existing: VariableDictionary | None = None
+    llm_config: LLMConfig | None = None
+
+
+class VariableDictInferResponse(BaseModel):
+    dictionary: VariableDictionary
+    provider: str = "rules"
+    maas_error: str | None = None
+
+
+class VariableDictPatchItem(BaseModel):
+    column: str
+    before: dict = Field(default_factory=dict)
+    after: dict = Field(default_factory=dict)
+    op: str = Field("update", description="update/confirm")
+
+
+class VariableDictPatchPreviewRequest(BaseModel):
+    message: str
+    dictionary: VariableDictionary
+    llm_config: LLMConfig | None = None
+
+
+class VariableDictPatchPreviewResponse(BaseModel):
+    preview: list[VariableDictPatchItem] = Field(default_factory=list)
+    assistant_summary: str = ""
+    provider: str = "rules"
+    maas_error: str | None = None
+
+
+class VariableDictConfirmRequest(BaseModel):
+    dataset_id: str
+    dataset_hash: str = ""
+    patches: list[VariableDictPatchItem] = Field(default_factory=list)
+    dictionary: VariableDictionary
+
+
+class VariableDictConfirmResponse(BaseModel):
+    dictionary: VariableDictionary
+
+
+# ---------------------------------------------------------------------------
+# 结构化模型解读
+# ---------------------------------------------------------------------------
+
+
+class ExplanationSections(BaseModel):
+    model_and_question: str = ""
+    key_findings: str = ""
+    stats_explained: str = ""
+    reliability_limits: str = ""
+    next_steps: str = ""
+
+
+class CitedValue(BaseModel):
+    path: str
+    value: float | str
+
+
+class ModelExplanation(BaseModel):
+    status: str = Field("pending", description="pending/completed/failed/fallback")
+    revision: int = 1
+    research_question: str = ""
+    sections: ExplanationSections | None = None
+    cited_values: list[CitedValue] = Field(default_factory=list)
+    provider: str = "rules"
+    error: str | None = None
+    created_at: str = Field(default_factory=lambda: _now_iso())
+
+
+class ExplainVariable(BaseModel):
+    column: str
+    label: str | None = None
+    unit: str | None = None
+
+
+class ExplainVariables(BaseModel):
+    dependent: ExplainVariable | None = None
+    independent: list[ExplainVariable] = Field(default_factory=list)
+    controls: list[str] = Field(default_factory=list)
+
+
+class ExplainModelRequest(BaseModel):
+    research_question: str
+    model: str
+    variables: ExplainVariables = Field(default_factory=ExplainVariables)
+    model_results: ModelRunResults
+    diagnostics: dict | None = None
+    llm_config: LLMConfig | None = None
+
+
+# ---------------------------------------------------------------------------
+# 模型运行版本
+# ---------------------------------------------------------------------------
+
+
+class ModelRunConfig(BaseModel):
+    dependent_variable: str
+    independent_variables: list[str] = Field(default_factory=list)
+    entity_column: str | None = None
+    time_column: str | None = None
+    treatment_column: str | None = None
+    running_variable: str | None = None
+    instrument_variable: str | None = None
+
+
+class ModelRunRecord(BaseModel):
+    version_id: str
+    parent_id: str | None = None
+    created_at: str = Field(default_factory=lambda: _now_iso())
+    research_question: str = ""
+    dataset_id: str
+    dataset_hash: str = ""
+    variable_dictionary_snapshot: VariableDictionary | None = None
+    model: str = "OLS"
+    config: ModelRunConfig
+    result: RunModelResponse
+    diagnostics: dict = Field(default_factory=dict)
+    ai_explanation: ModelExplanation | None = None
+
+
+class ModelRunCreateRequest(BaseModel):
+    parent_id: str | None = None
+    research_question: str = ""
+    dataset_id: str
+    dataset_hash: str = ""
+    variable_dictionary_snapshot: VariableDictionary | None = None
+    model: str = "OLS"
+    config: ModelRunConfig
+    result: RunModelResponse
+    diagnostics: dict | None = None
+    ai_explanation: ModelExplanation | None = None
+
+
+class ModelRunListResponse(BaseModel):
+    runs: list[ModelRunRecord] = Field(default_factory=list)
+
+
+class ModelRunCompareRequest(BaseModel):
+    left_id: str
+    right_id: str
+    dataset_id: str
+
+
+class ModelRunCompareResponse(BaseModel):
+    comparable: bool
+    incomparable_reason: str | None = None
+    config_diff: dict = Field(default_factory=dict)
+    metrics_diff: dict = Field(default_factory=dict)
+    explanations: dict = Field(default_factory=dict)
+    ai_diff_summary: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# 关系图数据（数字只能来自 Python）
+# ---------------------------------------------------------------------------
+
+
+class ChartCaption(BaseModel):
+    how_to_read: str = ""
+    finding: str = ""
+    caveat: str = ""
+
+
+class ScatterPoint(BaseModel):
+    x: float
+    y: float
+
+
+class ScatterFit(BaseModel):
+    slope: float
+    intercept: float
+
+
+class ScatterResponse(BaseModel):
+    x: str
+    y: str
+    points: list[ScatterPoint] = Field(default_factory=list)
+    fit: ScatterFit | None = None
+    r: float | None = None
+    p_value: float | None = None
+    n: int = 0
+    warnings: list[str] = Field(default_factory=list)
+    caption: ChartCaption = Field(default_factory=ChartCaption)
+
+
+class CorrHeatmapResponse(BaseModel):
+    columns: list[str] = Field(default_factory=list)
+    matrix: list[list[float | None]] = Field(default_factory=list)
+    n_matrix: list[list[int]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    caption: ChartCaption = Field(default_factory=ChartCaption)

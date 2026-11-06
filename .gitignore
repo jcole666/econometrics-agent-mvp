@@ -20,3 +20,4 @@ desktop-workbench/
 .claude/
 tmp/
 release-*/
+.local_project_data/
