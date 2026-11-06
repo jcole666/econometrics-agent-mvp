@@ -14,8 +14,19 @@ import type {
 
 const BASE_URL = (import.meta.env.VITE_SIDECAR_URL as string | undefined) ?? "http://127.0.0.1:8768";
 
+/** 桌面应用启动 sidecar 时会注入本机令牌；浏览器里调试时该值为空，后端也就不校验。 */
+const LOCAL_TOKEN = typeof window === "undefined" ? "" : window.workbench?.localToken ?? "";
+
+function withToken(init?: RequestInit): RequestInit {
+  const headers = new Headers(init?.headers);
+  if (LOCAL_TOKEN) {
+    headers.set("X-Xiaoji-Token", LOCAL_TOKEN);
+  }
+  return { ...init, headers };
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE_URL}${path}`, init);
+  const response = await fetch(`${BASE_URL}${path}`, withToken(init));
   const contentType = response.headers.get("content-type") ?? "";
   const body = contentType.includes("application/json") ? await response.json() : await response.text();
 
@@ -41,7 +52,7 @@ export async function loadSampleProfile(): Promise<DataProfile> {
 }
 
 export async function loadSampleFile(): Promise<File> {
-  const response = await fetch(`${BASE_URL}/sample-data`);
+  const response = await fetch(`${BASE_URL}/sample-data`, withToken());
   if (!response.ok) {
     throw new Error("无法加载样例数据。");
   }
@@ -76,6 +87,13 @@ export async function runModel(file: File, payload: ModelRequest, modelType: str
     const value = payload[key];
     if (value) {
       form.append(key, value);
+    }
+  }
+
+  for (const key of ["policy_period", "cutoff", "bandwidth"] as const) {
+    const value = payload[key];
+    if (value !== null && value !== undefined && Number.isFinite(value)) {
+      form.append(key, String(value));
     }
   }
 

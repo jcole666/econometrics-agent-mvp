@@ -7,6 +7,7 @@ import {
   checkSidecarHealth,
   hasPackagedSidecar,
   lastSidecarExitCode,
+  localAccessToken,
   SIDECAR_PORT,
   startSidecar,
   stopSidecar,
@@ -382,6 +383,11 @@ function guideHtml(markdown: string) {
 }
 
 function installIpcHandlers() {
+  // 渲染进程通过 preload 同步取一次本机令牌，之后所有 sidecar 请求都带上它
+  ipcMain.on("get-local-token", (event) => {
+    event.returnValue = localAccessToken();
+  });
+
   ipcMain.handle("save-text-file", async (_event, payload: SaveTextPayload = {}) => {
     const content = payload.content || "";
     if (!content.trim()) {

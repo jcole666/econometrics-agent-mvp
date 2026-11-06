@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sys
 
 import pandas as pd
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from sidecar.schemas import (
     ChatRequest,
@@ -52,6 +53,28 @@ app = FastAPI(
 ALLOWED_ORIGINS = ["null", "http://127.0.0.1:5173", "http://localhost:5173"]
 ALLOWED_METHODS = ["GET", "POST", "OPTIONS"]
 ALLOWED_HEADERS = ["Content-Type", "X-Xiaoji-Token"]
+
+# 本机令牌：Electron 启动 sidecar 时写入环境变量，前端通过 preload 取值后带在请求头里。
+# 未设置环境变量时整段跳过（源码调试、pytest 都不受影响）。
+# 顺序很重要：本中间件先注册，CORS 后注册 → CORS 在外层，预检与 401 响应都能正常带上
+# CORS 头；同时这里仍显式放行 OPTIONS，避免将来调整顺序时又把预检打成 401。
+LOCAL_TOKEN_ENV = "XIAOJI_LOCAL_TOKEN"
+LOCAL_TOKEN_HEADER = "x-xiaoji-token"
+PUBLIC_PATHS = {"/health"}
+
+
+@app.middleware("http")
+async def require_local_token(request: Request, call_next):
+    expected = os.getenv(LOCAL_TOKEN_ENV, "").strip()
+    if not expected or request.method == "OPTIONS" or request.url.path in PUBLIC_PATHS:
+        return await call_next(request)
+    if request.headers.get(LOCAL_TOKEN_HEADER) == expected:
+        return await call_next(request)
+    return JSONResponse(
+        status_code=401,
+        content={"detail": "缺少或错误的本机访问令牌，请通过桌面应用调用本地服务。"},
+    )
+
 
 app.add_middleware(
     CORSMiddleware,

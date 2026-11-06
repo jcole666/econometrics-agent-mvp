@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -6,6 +7,18 @@ import path from "node:path";
 import { app } from "electron";
 
 export const SIDECAR_PORT = 8768;
+
+export const LOCAL_TOKEN_ENV = "XIAOJI_LOCAL_TOKEN";
+
+/**
+ * 每次启动生成一个随机令牌，注入 sidecar 环境变量，并交给渲染进程带在请求头里。
+ * 这样本机其他进程即使能访问 127.0.0.1:8768，也调不动这些接口（例如借接口把 Key 转发出去）。
+ */
+const LOCAL_TOKEN = crypto.randomUUID();
+
+export function localAccessToken() {
+  return LOCAL_TOKEN;
+}
 
 let sidecar: ChildProcess | null = null;
 let exitCode: number | null = null;
@@ -57,7 +70,7 @@ export function startSidecar() {
 
   sidecar = spawn(command, args, {
     cwd,
-    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    env: { ...process.env, PYTHONUNBUFFERED: "1", [LOCAL_TOKEN_ENV]: LOCAL_TOKEN },
     stdio: app.isPackaged ? "ignore" : "inherit",
     windowsHide: true
   });

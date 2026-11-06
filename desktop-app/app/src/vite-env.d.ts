@@ -3,6 +3,7 @@
 interface Window {
   workbench?: {
     platform: string;
+    localToken?: string;
     onOpenModelSettings?: (callback: () => void) => () => void;
     onDataFileSelected?: (callback: (payload: SelectedDataFile) => void) => () => void;
     saveTextFile?: (payload: { fileName: string; content: string }) => Promise<SaveFileResult>;
