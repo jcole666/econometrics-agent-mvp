@@ -6,7 +6,9 @@
 
 Windows 用户直接下载最新版：
 
-[Econometrics-Agent-Workbench-0.6.2-portable.exe](https://github.com/jcole666/econometrics-agent-mvp/releases/download/v0.6.2/Econometrics-Agent-Workbench-0.6.2-portable.exe)
+[前往 Releases 下载最新版](https://github.com/jcole666/econometrics-agent-mvp/releases/latest)
+
+产物文件名形如 `Econometrics-Agent-Workbench-<版本号>-portable.exe`，免安装，放在任意目录即可。
 
 下载后双击即可使用。第一次启动会自动拉起本地分析服务，可能需要等待十几秒。
 
@@ -14,11 +16,13 @@ Windows 用户直接下载最新版：
 
 旧版本仍保留在 [GitHub Releases](https://github.com/jcole666/econometrics-agent-mvp/releases) 页面，可以按版本号下载。
 
-校验值：
+校验值（v0.6.2，历史版本）：
 
 ```text
 SHA256 9893534ECC6918AE5BB4783F10D448CF039F6212057B75225F78F9F6E3F34B8C
 ```
+
+从下一个版本起，每个 Release 会同时附上同名的 `.sha256` 文件，下载后可用 `Get-FileHash .\<exe> -Algorithm SHA256` 比对。
 
 ## 直接打开
 
@@ -43,7 +47,7 @@ SHA256 9893534ECC6918AE5BB4783F10D448CF039F6212057B75225F78F9F6E3F34B8C
 原始打包产物仍保留在：
 
 ```text
-desktop-app\app\release\Econometrics-Agent-Workbench-0.6.2-portable.exe
+desktop-app\app\release\Econometrics-Agent-Workbench-<版本号>-portable.exe
 ```
 
 ## 快速体验
