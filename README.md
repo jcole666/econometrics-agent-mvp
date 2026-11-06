@@ -16,13 +16,15 @@ Windows 用户直接下载最新版：
 
 旧版本仍保留在 [GitHub Releases](https://github.com/jcole666/econometrics-agent-mvp/releases) 页面，可以按版本号下载。
 
-校验值（v0.6.2，历史版本）：
+校验值（v0.7.0）：
 
 ```text
-SHA256 9893534ECC6918AE5BB4783F10D448CF039F6212057B75225F78F9F6E3F34B8C
+SHA256 D116B3EC3BA340DA9DAF42C691B94C46E81006C7233BC2BEF8E6D15492CBE5CF
 ```
 
-从下一个版本起，每个 Release 会同时附上同名的 `.sha256` 文件，下载后可用 `Get-FileHash .\<exe> -Algorithm SHA256` 比对。
+下载后可用 `Get-FileHash .\<exe> -Algorithm SHA256` 比对；每个 Release 同时附同名 `.sha256` 文件。
+
+历史版本 v0.6.2 的校验值为 `9893534ECC6918AE5BB4783F10D448CF039F6212057B75225F78F9F6E3F34B8C`。
 
 ## 从源码运行
 
