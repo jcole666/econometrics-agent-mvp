@@ -23,6 +23,11 @@ from sidecar.schemas import (
     CorrHeatmapResponse,
     ExplainModelRequest,
     ModelExplanation,
+    ModelRunCompareRequest,
+    ModelRunCompareResponse,
+    ModelRunCreateRequest,
+    ModelRunListResponse,
+    ModelRunRecord,
     VariableDictConfirmRequest,
     VariableDictConfirmResponse,
     VariableDictInferRequest,
@@ -38,6 +43,13 @@ from sidecar.services.data_profile import profile_dataframe
 from sidecar.services.maas_client import MaasUnavailable, get_maas_recommendation, get_maas_status, llm_provider_name
 from sidecar.services.model_explainer import explain_model
 from sidecar.services.model_runner import run_model
+from sidecar.services.model_runs import (
+    attach_explanation,
+    compare_runs,
+    create_run,
+    get_run,
+    list_runs,
+)
 from sidecar.services.model_selector import select_model
 from sidecar.services.relationship_stats import corr_heatmap, scatter_stats
 from sidecar.services.report_generator import generate_markdown_report
@@ -269,6 +281,56 @@ async def relationship_corr_heatmap(
 @app.post("/explain/model", response_model=ModelExplanation)
 def explain_model_endpoint(request: ExplainModelRequest) -> ModelExplanation:
     return explain_model(request)
+
+
+@app.post("/model-runs", response_model=ModelRunRecord)
+def create_model_run_endpoint(request: ModelRunCreateRequest) -> ModelRunRecord:
+    try:
+        return create_run(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/model-runs", response_model=ModelRunListResponse)
+def list_model_runs_endpoint(dataset_id: str) -> ModelRunListResponse:
+    try:
+        return ModelRunListResponse(runs=list_runs(dataset_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/model-runs/compare", response_model=ModelRunCompareResponse)
+def compare_model_runs_endpoint(request: ModelRunCompareRequest) -> ModelRunCompareResponse:
+    try:
+        return compare_runs(request.dataset_id, request.left_id, request.right_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/model-runs/{version_id}", response_model=ModelRunRecord)
+def get_model_run_endpoint(version_id: str, dataset_id: str) -> ModelRunRecord:
+    try:
+        record = get_run(dataset_id, version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"版本 {version_id} 不存在。")
+    return record
+
+
+@app.post("/model-runs/{version_id}/explanation", response_model=ModelRunRecord)
+def attach_model_explanation_endpoint(
+    version_id: str,
+    dataset_id: str,
+    explanation: ModelExplanation,
+) -> ModelRunRecord:
+    try:
+        record = attach_explanation(dataset_id, version_id, explanation)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"版本 {version_id} 不存在。")
+    return record
 
 
 @app.post("/chat", response_model=ChatResponse)

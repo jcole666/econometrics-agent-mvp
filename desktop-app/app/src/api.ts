@@ -12,6 +12,10 @@ import type {
   CorrHeatmapResponse,
   ExplainModelRequest,
   ModelExplanation,
+  ModelRunCompareResponse,
+  ModelRunCreateRequest,
+  ModelRunListResponse,
+  ModelRunRecord,
   RunModelResponse,
   ScatterResponse,
   VariableDictConfirmRequest,
@@ -210,5 +214,48 @@ export async function explainModel(payload: ExplainModelRequest): Promise<ModelE
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 模型运行版本
+// ---------------------------------------------------------------------------
+
+export async function createModelRun(payload: ModelRunCreateRequest): Promise<ModelRunRecord> {
+  return requestJson("/model-runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function listModelRuns(datasetId: string): Promise<ModelRunRecord[]> {
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  const body = await requestJson<ModelRunListResponse>(`/model-runs?${query.toString()}`);
+  return body.runs;
+}
+
+export async function updateModelRunExplanation(
+  datasetId: string,
+  versionId: string,
+  explanation: ModelExplanation
+): Promise<ModelRunRecord> {
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  return requestJson(`/model-runs/${versionId}/explanation?${query.toString()}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(explanation)
+  });
+}
+
+export async function compareModelRuns(
+  datasetId: string,
+  leftId: string,
+  rightId: string
+): Promise<ModelRunCompareResponse> {
+  return requestJson("/model-runs/compare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataset_id: datasetId, left_id: leftId, right_id: rightId })
   });
 }

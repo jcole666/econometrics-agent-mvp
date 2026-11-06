@@ -2,6 +2,7 @@ import {
   Activity,
   ArrowLeft,
   ArrowRight,
+  ArrowRightLeft,
   BookOpen,
   ChevronDown,
   Cpu,
@@ -10,6 +11,7 @@ import {
   FileText,
   FileUp,
   HelpCircle,
+  History,
   MessageSquare,
   Minimize2,
   Play,
@@ -29,19 +31,23 @@ import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffec
 
 import {
   chat,
+  compareModelRuns,
   confirmVariableDict,
+  createModelRun,
   explainModel,
   generateReport,
   getHealth,
   getVariableDict,
   inferVariableDict,
   inferVariables,
+  listModelRuns,
   loadSampleFile,
   loadSampleProfile,
   previewVariableDictPatch,
   profileData,
   recommendModel,
-  runModel
+  runModel,
+  updateModelRunExplanation
 } from "./api";
 import {
   chatPreview,
@@ -65,6 +71,8 @@ import { ChatMessageBody, MarkdownBody, ThinkingMessage } from "./markdown";
 import { saveReportMarkdown, saveReportPdf } from "./reportExport";
 import { dtypeLabel } from "./dtypeLabel";
 import { ExplanationCard } from "./components/ExplanationCard";
+import { ModelRunCompare } from "./components/ModelRunCompare";
+import { ModelRunHistory } from "./components/ModelRunHistory";
 import { RelationshipCharts } from "./components/RelationshipCharts";
 import { RelationshipNetwork } from "./components/RelationshipNetwork";
 import { VariableDictionaryPanel } from "./components/VariableDictionaryPanel";
@@ -112,6 +120,9 @@ import type {
   ModelExplanation,
   ModelRecommendation,
   ModelRequest,
+  ModelRunCompareResponse,
+  ModelRunConfig,
+  ModelRunRecord,
   ProfileColumn,
   RelationshipHint,
   RunModelResponse,
@@ -622,6 +633,13 @@ export default function App() {
   const [dictionaryNotice, setDictionaryNotice] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<ModelExplanation | null>(null);
   const [explainLoading, setExplainLoading] = useState(false);
+  const [runs, setRuns] = useState<ModelRunRecord[]>([]);
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
+  const [viewingVersionId, setViewingVersionId] = useState<string | null>(null);
+  const [compareIds, setCompareIds] = useState<{ left: string; right: string } | null>(null);
+  const [comparison, setComparison] = useState<ModelRunCompareResponse | null>(null);
+  const [compareBusy, setCompareBusy] = useState(false);
+  const [runSaveNotice, setRunSaveNotice] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatSearch, setChatSearch] = useState("");
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
@@ -1017,6 +1035,12 @@ export default function App() {
     setRunResult(null);
     setRunNotice(null);
     setExplanation(null);
+    setRuns([]);
+    setActiveVersionId(null);
+    setViewingVersionId(null);
+    setCompareIds(null);
+    setComparison(null);
+    setRunSaveNotice(null);
     setReport("");
     setSampleStage("idle");
     setActiveStep(1);
@@ -1196,10 +1220,30 @@ export default function App() {
       if (!nextRunResult.success) {
         throw new Error(nextRunResult.error ?? "模型运行失败。");
       }
-      void requestExplanation(nextRunResult, SAMPLE_SCENARIO.question, {
-        dependent: SAMPLE_SCENARIO.dependentVariable,
-        independent: splitList(SAMPLE_SCENARIO.independentVariables)
+      const sampleRecord = await saveRun({
+        researchQuestion: SAMPLE_SCENARIO.question,
+        model: nextModel,
+        config: {
+          dependent_variable: SAMPLE_SCENARIO.dependentVariable,
+          independent_variables: splitList(SAMPLE_SCENARIO.independentVariables),
+          entity_column: SAMPLE_SCENARIO.entityColumn,
+          time_column: SAMPLE_SCENARIO.timeColumn,
+          treatment_column: null,
+          running_variable: null,
+          instrument_variable: null
+        },
+        result: nextRunResult,
+        identity: await datasetIdentity(sampleFile)
       });
+      void requestExplanation(
+        nextRunResult,
+        SAMPLE_SCENARIO.question,
+        {
+          dependent: SAMPLE_SCENARIO.dependentVariable,
+          independent: splitList(SAMPLE_SCENARIO.independentVariables)
+        },
+        sampleRecord?.version_id ?? null
+      );
 
       const nextPath = buildResearchPath({
         profile: sampleProfile,
@@ -1268,6 +1312,7 @@ export default function App() {
     try {
       const nextIdentity = await datasetIdentity(nextFile);
       setIdentity(nextIdentity);
+      void loadRuns(nextIdentity.dataset_id);
       const cached = readCachedDictionary(nextIdentity.dataset_id, nextIdentity.dataset_hash);
       setDictionary(cached);
       setDictionaryNotice(null);
@@ -1373,6 +1418,89 @@ export default function App() {
     }
   }
 
+  async function loadRuns(datasetId: string) {
+    try {
+      const list = await listModelRuns(datasetId);
+      setRuns(list);
+    } catch {
+      setRuns([]);
+    }
+  }
+
+  /** 每次成功运行新建一个版本，绝不覆盖旧结果。 */
+  async function saveRun(snapshot: {
+    researchQuestion: string;
+    model: string;
+    config: ModelRunConfig;
+    result: RunModelResponse;
+    identity: DatasetIdentity;
+  }): Promise<ModelRunRecord | null> {
+    try {
+      const record = await createModelRun({
+        parent_id: activeVersionId,
+        research_question: snapshot.researchQuestion,
+        dataset_id: snapshot.identity.dataset_id,
+        dataset_hash: snapshot.identity.dataset_hash,
+        variable_dictionary_snapshot: dictionary,
+        model: snapshot.model,
+        config: snapshot.config,
+        result: snapshot.result,
+        diagnostics: profile
+          ? { rows: profile.rows, columns_count: profile.columns_count }
+          : null,
+        ai_explanation: null
+      });
+      setRuns((current) => [...current, record]);
+      setActiveVersionId(record.version_id);
+      setRunSaveNotice(`已保存为 ${record.version_id}。`);
+      return record;
+    } catch (error) {
+      setRunSaveNotice(error instanceof Error ? `版本保存失败：${error.message}` : "版本保存失败。");
+      return null;
+    }
+  }
+
+  function openVersion(record: ModelRunRecord) {
+    setViewingVersionId(record.version_id);
+    setRunResult(record.result);
+    setRunNotice(null);
+    setExplanation(record.ai_explanation);
+    setModelType(record.model);
+    setDependentVariable(record.config.dependent_variable ?? "");
+    setIndependentVariables(record.config.independent_variables.join(", "));
+    setEntityColumn(record.config.entity_column ?? "");
+    setTimeColumn(record.config.time_column ?? "");
+    setTreatmentColumn(record.config.treatment_column ?? "");
+    setRunningVariable(record.config.running_variable ?? "");
+    setInstrumentVariable(record.config.instrument_variable ?? "");
+    setStatus(`正在查看 ${record.version_id}（只读）。字典与数据仍按当前状态，不随快照回滚。`);
+  }
+
+  function continueFromVersion(record: ModelRunRecord) {
+    setActiveVersionId(record.version_id);
+    setViewingVersionId(null);
+    setStatus(`下一次运行会以 ${record.version_id} 为父版本保存。`);
+  }
+
+  async function compareVersions(leftId: string, rightId: string) {
+    const current = await ensureIdentity();
+    if (!current) {
+      setStatus("请先选择数据文件。");
+      return;
+    }
+    setCompareBusy(true);
+    try {
+      const result = await compareModelRuns(current.dataset_id, leftId, rightId);
+      setCompareIds({ left: leftId, right: rightId });
+      setComparison(result);
+      setStatus(result.comparable ? "版本对比已生成。" : `两个版本不可比：${result.incomparable_reason ?? ""}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "版本对比失败。");
+    } finally {
+      setCompareBusy(false);
+    }
+  }
+
   async function recommend() {
     const researchQuestion = requireResearchQuestion();
     if (!researchQuestion) {
@@ -1419,9 +1547,30 @@ export default function App() {
     try {
       const next = await runModel(file, buildRequest(researchQuestion), modelType);
       setRunResult(next);
+      setViewingVersionId(null);
       setStatus(next.success ? "模型运行完成。" : next.error ?? "模型运行已停止。");
       if (next.success) {
-        void requestExplanation(next, researchQuestion);
+        const current = await ensureIdentity();
+        let versionId: string | null = null;
+        if (current) {
+          const record = await saveRun({
+            researchQuestion,
+            model: next.model_type,
+            config: {
+              dependent_variable: dependentVariable.trim(),
+              independent_variables: splitList(independentVariables),
+              entity_column: entityColumn.trim() || null,
+              time_column: timeColumn.trim() || null,
+              treatment_column: treatmentColumn.trim() || null,
+              running_variable: runningVariable.trim() || null,
+              instrument_variable: instrumentVariable.trim() || null
+            },
+            result: next,
+            identity: current
+          });
+          versionId = record?.version_id ?? null;
+        }
+        void requestExplanation(next, researchQuestion, undefined, versionId);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "模型运行失败。";
@@ -1439,7 +1588,8 @@ export default function App() {
   async function requestExplanation(
     result: RunModelResponse,
     researchQuestion: string,
-    variables?: { dependent: string; independent: string[] }
+    variables?: { dependent: string; independent: string[] },
+    versionId?: string | null
   ) {
     if (!result.success || !result.results) return;
     const dependent = variables?.dependent ?? dependentVariable.trim();
@@ -1462,6 +1612,17 @@ export default function App() {
         llm_config: llmConfig
       });
       setExplanation(next);
+      if (versionId) {
+        const current = identity ?? (await ensureIdentity());
+        if (current) {
+          try {
+            const updated = await updateModelRunExplanation(current.dataset_id, versionId, next);
+            setRuns((list) => list.map((item) => (item.version_id === updated.version_id ? updated : item)));
+          } catch {
+            // 解读已经展示，写不进版本不阻断主流程
+          }
+        }
+      }
       if (next.status !== "completed") {
         setStatus(next.error ? `已生成本地基础解读：${next.error}` : "已生成本地基础解读。");
       } else {
@@ -1982,7 +2143,42 @@ export default function App() {
                           dictionary={dictionary}
                           explanation={explanation}
                           explainLoading={explainLoading}
-                          onExplain={() => requestExplanation(runResult!, question.trim())}
+                          onExplain={() => requestExplanation(runResult!, question.trim(), undefined, viewingVersionId ?? activeVersionId)}
+                        />
+                      </Panel>
+                    ) : null}
+                    {viewingVersionId ? (
+                      <div className="run-viewing-banner">
+                        <span>
+                          正在查看历史版本 <strong>{viewingVersionId}</strong>（只读）。模型结果与解读来自该版本，变量字典仍按当前数据。
+                        </span>
+                        <button type="button" className="secondary" onClick={() => setViewingVersionId(null)}>
+                          退出查看
+                        </button>
+                      </div>
+                    ) : null}
+                    {runs.length > 0 || runResult ? (
+                      <Panel title="运行版本" icon={<History size={17} />}>
+                        <ModelRunHistory
+                          runs={runs}
+                          activeVersionId={activeVersionId}
+                          viewingVersionId={viewingVersionId}
+                          dictionary={dictionary}
+                          busy={compareBusy}
+                          notice={runSaveNotice}
+                          onOpen={openVersion}
+                          onContinue={continueFromVersion}
+                          onCompare={compareVersions}
+                        />
+                      </Panel>
+                    ) : null}
+                    {comparison ? (
+                      <Panel title="版本对比" icon={<ArrowRightLeft size={17} />}>
+                        <ModelRunCompare
+                          comparison={comparison}
+                          left={runs.find((item) => item.version_id === compareIds?.left) ?? null}
+                          right={runs.find((item) => item.version_id === compareIds?.right) ?? null}
+                          dictionary={dictionary}
                         />
                       </Panel>
                     ) : null}
@@ -2027,7 +2223,7 @@ export default function App() {
                           dictionary={dictionary}
                           explanation={explanation}
                           explainLoading={explainLoading}
-                          onExplain={() => requestExplanation(runResult!, question.trim())}
+                          onExplain={() => requestExplanation(runResult!, question.trim(), undefined, viewingVersionId ?? activeVersionId)}
                         />
                       </Panel>
                     ) : null}
