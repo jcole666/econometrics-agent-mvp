@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,12 +10,11 @@ from urllib.parse import urlparse
 
 from sidecar.schemas import LLMConfig, ModelRequest
 from sidecar.services.code_generator import generate_code
+from sidecar.services.config_paths import read_env_file, resolve_env_file
 
 
-def _project_root() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-    return Path(__file__).resolve().parents[2]
+def _env_file() -> Path | None:
+    return resolve_env_file()
 
 
 DEFAULT_BASE_URL = "https://api.modelarts-maas.com/openai/v1"
@@ -69,6 +67,7 @@ def get_maas_status() -> dict[str, Any]:
     api_key = _get_api_key()
     enabled = not _is_disabled(os.getenv("MAAS_ENABLED", "auto"))
     base_url = os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+    env_file = getattr(_load_local_env, "_source", None)
     return {
         "provider": "huawei_maas",
         "enabled": enabled,
@@ -77,6 +76,7 @@ def get_maas_status() -> dict[str, Any]:
         "base_url": base_url,
         "base_url_allowed": is_base_url_allowed(base_url),
         "model": os.getenv("MAAS_MODEL", DEFAULT_MODEL),
+        "config_file": str(env_file) if env_file is not None else None,
     }
 
 
@@ -193,18 +193,13 @@ def _load_local_env() -> None:
     if getattr(_load_local_env, "_done", False):
         return
 
-    env_path = _project_root() / ".env"
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in stripped:
-                continue
-            key, value = stripped.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if key and key not in os.environ:
+    env_path = _env_file()
+    if env_path is not None:
+        for key, value in read_env_file(env_path).items():
+            if key not in os.environ:
                 os.environ[key] = value
 
+    _load_local_env._source = env_path
     _load_local_env._done = True
 
 

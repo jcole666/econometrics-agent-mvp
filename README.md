@@ -99,4 +99,14 @@ npm --prefix app run typecheck
 
 ## 配置
 
-不要把 API Key 写进代码。需要接入 MaaS 时，用 `.env`、环境变量，或本地未跟踪的 `desktop-app/config.toml`。
+不要把 API Key 写进代码或提交到仓库。服务端按以下顺序查找 `.env`，**第一个存在的生效**：
+
+1. 环境变量 `XIAOJI_CONFIG_DIR` 指向的目录（便于测试与运维覆盖）
+2. `%APPDATA%\EconometricsAgent\.env`（打包版用户可写目录）
+3. 仓库根目录 `.env`（仅源码运行）
+
+打包版不会从 exe 内部读取任何配置文件，所以升级版本不会覆盖你已经填好的 Key。
+
+可用键位见 `.env.example`：`MAAS_API_KEY`、`MAAS_BASE_URL`、`MAAS_MODEL`、`MAAS_ENABLED`、`MAAS_TIMEOUT`、`MAAS_ALLOWED_HOSTS`。
+
+`MAAS_BASE_URL` 只允许 HTTPS，且域名必须命中白名单（本机回环地址可用 HTTP，便于接本地推理服务）；需要新增域名时用 `MAAS_ALLOWED_HOSTS` 逗号分隔追加。启动后可访问 `http://127.0.0.1:8768/health` 查看 `maas.configured` 与 `maas.config_file`，确认配置是否被读到。
