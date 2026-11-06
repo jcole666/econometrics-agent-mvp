@@ -1195,6 +1195,32 @@ export default function App() {
     setSampleStage("data");
   }
 
+  /**
+   * 示例演示专用：先按规则把变量字典推断出来，让画像、关系图、结果表一路都显示中文标签。
+   * 失败不阻断演示，只是回到「没有字典」的原始列名状态。
+   */
+  async function prepareSampleDictionary(targetProfile: DataProfile, targetIdentity: DatasetIdentity) {
+    try {
+      const response = await inferVariableDict({
+        research_question: SAMPLE_SCENARIO.question,
+        dataset_id: targetIdentity.dataset_id,
+        dataset_hash: targetIdentity.dataset_hash,
+        columns: targetProfile.columns,
+        existing: null,
+        llm_config: llmConfig
+      });
+      setDictionary(response.dictionary);
+      writeCachedDictionary(response.dictionary);
+      setDictionaryNotice(
+        response.maas_error
+          ? `示例字典已按本地规则生成：${response.maas_error}`
+          : "示例变量字典已生成，可在「变量字典」里逐列核对。"
+      );
+    } catch {
+      setDictionary(null);
+    }
+  }
+
   async function loadSampleScenario() {
     setBusy("sample");
     setActiveStep(1);
@@ -1202,6 +1228,9 @@ export default function App() {
     try {
       const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
       applySampleState(sampleFile, sampleProfile);
+
+      const sampleIdentity = await datasetIdentity(sampleFile);
+      await prepareSampleDictionary(sampleProfile, sampleIdentity);
 
       const request = buildSampleRequest(sampleProfile);
 
@@ -1233,7 +1262,7 @@ export default function App() {
           instrument_variable: null
         },
         result: nextRunResult,
-        identity: await datasetIdentity(sampleFile)
+        identity: sampleIdentity
       });
       void requestExplanation(
         nextRunResult,
