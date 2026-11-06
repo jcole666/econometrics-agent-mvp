@@ -21,6 +21,8 @@ from sidecar.schemas import (
     RunModelResponse,
     ScatterResponse,
     CorrHeatmapResponse,
+    ExplainModelRequest,
+    ModelExplanation,
     VariableDictConfirmRequest,
     VariableDictConfirmResponse,
     VariableDictInferRequest,
@@ -34,6 +36,7 @@ from sidecar.services.code_generator import generate_code
 from sidecar.services.data_io import read_upload_dataframe
 from sidecar.services.data_profile import profile_dataframe
 from sidecar.services.maas_client import MaasUnavailable, get_maas_recommendation, get_maas_status, llm_provider_name
+from sidecar.services.model_explainer import explain_model
 from sidecar.services.model_runner import run_model
 from sidecar.services.model_selector import select_model
 from sidecar.services.relationship_stats import corr_heatmap, scatter_stats
@@ -261,6 +264,11 @@ async def relationship_corr_heatmap(
         return corr_heatmap(df, selected)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/explain/model", response_model=ModelExplanation)
+def explain_model_endpoint(request: ExplainModelRequest) -> ModelExplanation:
+    return explain_model(request)
 
 
 @app.post("/chat", response_model=ChatResponse)

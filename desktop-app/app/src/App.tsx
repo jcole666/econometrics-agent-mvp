@@ -30,6 +30,7 @@ import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffec
 import {
   chat,
   confirmVariableDict,
+  explainModel,
   generateReport,
   getHealth,
   getVariableDict,
@@ -63,6 +64,7 @@ import {
 import { ChatMessageBody, MarkdownBody, ThinkingMessage } from "./markdown";
 import { saveReportMarkdown, saveReportPdf } from "./reportExport";
 import { dtypeLabel } from "./dtypeLabel";
+import { ExplanationCard } from "./components/ExplanationCard";
 import { RelationshipCharts } from "./components/RelationshipCharts";
 import { RelationshipNetwork } from "./components/RelationshipNetwork";
 import { VariableDictionaryPanel } from "./components/VariableDictionaryPanel";
@@ -107,6 +109,7 @@ import type {
   CoefficientResult,
   DataProfile,
   InferVariablesResponse,
+  ModelExplanation,
   ModelRecommendation,
   ModelRequest,
   ProfileColumn,
@@ -617,6 +620,8 @@ export default function App() {
   const [identity, setIdentity] = useState<DatasetIdentity | null>(null);
   const [dictionary, setDictionary] = useState<VariableDictionary | null>(null);
   const [dictionaryNotice, setDictionaryNotice] = useState<string | null>(null);
+  const [explanation, setExplanation] = useState<ModelExplanation | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatSearch, setChatSearch] = useState("");
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
@@ -1011,6 +1016,7 @@ export default function App() {
     setModelType("OLS");
     setRunResult(null);
     setRunNotice(null);
+    setExplanation(null);
     setReport("");
     setSampleStage("idle");
     setActiveStep(1);
@@ -1160,6 +1166,7 @@ export default function App() {
     setRecommendationNotice(null);
     setRunResult(null);
     setRunNotice(null);
+    setExplanation(null);
     setReport("");
     setSampleStage("data");
   }
@@ -1189,6 +1196,10 @@ export default function App() {
       if (!nextRunResult.success) {
         throw new Error(nextRunResult.error ?? "模型运行失败。");
       }
+      void requestExplanation(nextRunResult, SAMPLE_SCENARIO.question, {
+        dependent: SAMPLE_SCENARIO.dependentVariable,
+        independent: splitList(SAMPLE_SCENARIO.independentVariables)
+      });
 
       const nextPath = buildResearchPath({
         profile: sampleProfile,
@@ -1409,12 +1420,57 @@ export default function App() {
       const next = await runModel(file, buildRequest(researchQuestion), modelType);
       setRunResult(next);
       setStatus(next.success ? "模型运行完成。" : next.error ?? "模型运行已停止。");
+      if (next.success) {
+        void requestExplanation(next, researchQuestion);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "模型运行失败。";
       setRunNotice(message);
       setStatus(message);
     } finally {
       setBusy(null);
+    }
+  }
+
+  /**
+   * 生成结构化解读。数字全部来自本次 RunModelResponse，模型输出由后端校验；
+   * 失败时后端仍返回 200 + fallback 文案，这里照常展示。
+   */
+  async function requestExplanation(
+    result: RunModelResponse,
+    researchQuestion: string,
+    variables?: { dependent: string; independent: string[] }
+  ) {
+    if (!result.success || !result.results) return;
+    const dependent = variables?.dependent ?? dependentVariable.trim();
+    const independent = variables?.independent ?? splitList(independentVariables);
+    if (!dependent || independent.length === 0) return;
+
+    setExplainLoading(true);
+    setExplanation(null);
+    try {
+      const next = await explainModel({
+        research_question: researchQuestion,
+        model: result.model_type,
+        variables: {
+          dependent: { column: dependent, label: displayName(dependent, dictionary) },
+          independent: independent.map((column) => ({ column, label: displayName(column, dictionary) })),
+          controls: []
+        },
+        model_results: result.results,
+        diagnostics: null,
+        llm_config: llmConfig
+      });
+      setExplanation(next);
+      if (next.status !== "completed") {
+        setStatus(next.error ? `已生成本地基础解读：${next.error}` : "已生成本地基础解读。");
+      } else {
+        setStatus("结构化解读已生成。");
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "解读生成失败。");
+    } finally {
+      setExplainLoading(false);
     }
   }
 
@@ -1920,7 +1976,14 @@ export default function App() {
                     ) : null}
                     {runResult ? (
                       <Panel title="模型结果" icon={<Activity size={17} />}>
-                        <RunResultView result={runResult} notice={runNotice} dictionary={dictionary} />
+                        <RunResultView
+                          result={runResult}
+                          notice={runNotice}
+                          dictionary={dictionary}
+                          explanation={explanation}
+                          explainLoading={explainLoading}
+                          onExplain={() => requestExplanation(runResult!, question.trim())}
+                        />
                       </Panel>
                     ) : null}
                   </div>
@@ -1958,7 +2021,14 @@ export default function App() {
                     </Panel>
                     {runResult ? (
                       <Panel title="模型结果" icon={<Activity size={17} />}>
-                        <RunResultView result={runResult} notice={runNotice} dictionary={dictionary} />
+                        <RunResultView
+                          result={runResult}
+                          notice={runNotice}
+                          dictionary={dictionary}
+                          explanation={explanation}
+                          explainLoading={explainLoading}
+                          onExplain={() => requestExplanation(runResult!, question.trim())}
+                        />
                       </Panel>
                     ) : null}
                   </div>
@@ -2880,11 +2950,17 @@ function RecommendationView({
 function RunResultView({
   result,
   notice,
-  dictionary
+  dictionary,
+  explanation,
+  explainLoading,
+  onExplain
 }: {
   result: RunModelResponse | null;
   notice: string | null;
   dictionary?: VariableDictionary | null;
+  explanation?: ModelExplanation | null;
+  explainLoading?: boolean;
+  onExplain?: () => void;
 }) {
   if (notice) {
     return <div className="empty">{notice}</div>;
@@ -2909,6 +2985,9 @@ function RunResultView({
           {warning}
         </p>
       ))}
+      {onExplain ? (
+        <ExplanationCard explanation={explanation ?? null} loading={Boolean(explainLoading)} onRegenerate={onExplain} />
+      ) : null}
       <ResultInterpretation result={result} />
       <CoefficientTable coefficients={result.results.coefficients} dictionary={dictionary} />
     </div>

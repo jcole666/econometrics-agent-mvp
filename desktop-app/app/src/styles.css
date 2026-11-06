@@ -2896,3 +2896,70 @@ body.resizing-panels * {
     grid-template-columns: 1fr;
   }
 }
+
+/* 结构化解读 */
+.explain-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-3);
+  padding: 12px;
+}
+.explain-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.explain-head > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.explain-head strong {
+  font-size: 13px;
+}
+.explain-badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.explain-badge-fallback {
+  border-color: #e2cdb0;
+  background: #fdf6ec;
+  color: #8a6a2b;
+}
+.explain-error {
+  margin: 0;
+  color: var(--rust);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.explain-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.explain-sections section {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 8px 10px;
+}
+.explain-sections span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.explain-sections p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.6;
+}

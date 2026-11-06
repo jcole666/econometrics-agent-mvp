@@ -10,6 +10,8 @@ import type {
   ModelRequest,
   ReportResponse,
   CorrHeatmapResponse,
+  ExplainModelRequest,
+  ModelExplanation,
   RunModelResponse,
   ScatterResponse,
   VariableDictConfirmRequest,
@@ -201,4 +203,12 @@ export async function fetchCorrHeatmap(file: File, columns: string[]): Promise<C
   form.append("file", file);
   form.append("columns", columns.join(","));
   return requestJson("/relationship/corr-heatmap", { method: "POST", body: form });
+}
+
+export async function explainModel(payload: ExplainModelRequest): Promise<ModelExplanation> {
+  return requestJson("/explain/model", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 }
