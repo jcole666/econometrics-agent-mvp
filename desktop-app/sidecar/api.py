@@ -46,12 +46,19 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# 打包版通过 file:// 加载页面，浏览器发送的 Origin 是字符串 "null"；
+# 开发版走 Vite（5173）。两套来源都要放行，否则发布版所有请求都会被 CORS 拦掉。
+# 本服务不依赖 Cookie，因此关闭 allow_credentials，并只放行实际用到的方法与请求头。
+ALLOWED_ORIGINS = ["null", "http://127.0.0.1:5173", "http://localhost:5173"]
+ALLOWED_METHODS = ["GET", "POST", "OPTIONS"]
+ALLOWED_HEADERS = ["Content-Type", "X-Xiaoji-Token"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
 )
 
 
