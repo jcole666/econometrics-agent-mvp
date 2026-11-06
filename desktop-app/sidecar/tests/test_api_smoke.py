@@ -165,7 +165,7 @@ def test_panel_fixed_effects_runner_returns_coefficients() -> None:
     assert any("固定效应" in item for item in body["warnings"])
 
 
-def test_unsupported_complex_model_returns_business_error() -> None:
+def test_unsupported_complex_model_returns_code_template() -> None:
     with SAMPLE_PATH.open("rb") as handle:
         response = client.post(
             "/run-model",
@@ -174,13 +174,36 @@ def test_unsupported_complex_model_returns_business_error() -> None:
                 "model_type": "RDD",
                 "dependent_variable": "创新指数",
                 "independent_variables": "数字经济发展指数,人力资本",
+                "running_variable": "数字经济发展指数",
+                "cutoff": "3.5",
             },
         )
 
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is False
-    assert "暂不支持真实运行" in body["error"]
+    assert body["execution_status"] == "planned"
+    assert "还不能直接估计 RDD" in body["error"]
+    assert "CUTOFF = 3.5" in body["code_template"]
+    assert body["results"] is None
+
+
+def test_supported_model_reports_executed_status() -> None:
+    with SAMPLE_PATH.open("rb") as handle:
+        response = client.post(
+            "/run-model",
+            files={"file": ("sample_city_panel.csv", handle, "text/csv")},
+            data={
+                "model_type": "OLS",
+                "dependent_variable": "创新指数",
+                "independent_variables": "数字经济发展指数",
+            },
+        )
+
+    body = response.json()
+    assert body["success"] is True
+    assert body["execution_status"] == "executed"
+    assert body["code_template"] is None
 
 
 def test_report_includes_analysis_notes() -> None:

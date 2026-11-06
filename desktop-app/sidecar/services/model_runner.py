@@ -8,7 +8,8 @@ import pandas as pd
 import statsmodels.api as sm
 from linearmodels.panel import PanelOLS
 
-from sidecar.schemas import CoefficientResult, ModelRunResults, RunModelResponse
+from sidecar.schemas import CoefficientResult, ModelRequest, ModelRunResults, RunModelResponse
+from sidecar.services.code_generator import generate_code
 
 SUPPORTED_RUN_MODELS = {"OLS", "Logit", "Panel Fixed Effects"}
 
@@ -20,15 +21,40 @@ def run_model(
     independent_variables: list[str],
     entity_column: str | None = None,
     time_column: str | None = None,
+    treatment_column: str | None = None,
+    running_variable: str | None = None,
+    instrument_variable: str | None = None,
+    policy_period: float | None = None,
+    cutoff: float | None = None,
+    bandwidth: float | None = None,
 ) -> RunModelResponse:
     normalized_model = normalize_model_type(model_type)
     if normalized_model not in SUPPORTED_RUN_MODELS:
+        template = generate_code(
+            normalized_model,
+            ModelRequest(
+                research_question="",
+                columns=[],
+                dependent_variable=dependent_variable,
+                independent_variables=list(independent_variables),
+                entity_column=entity_column,
+                time_column=time_column,
+                treatment_column=treatment_column,
+                running_variable=running_variable,
+                instrument_variable=instrument_variable,
+                policy_period=policy_period,
+                cutoff=cutoff,
+                bandwidth=bandwidth,
+            ),
+        )
         return RunModelResponse(
             model_type=normalized_model,
             success=False,
+            execution_status="planned",
+            code_template=template,
             error=(
-                f"当前版本暂不支持真实运行 {normalized_model}。"
-                "可以先使用生成的代码模板和检查清单整理建模方案。"
+                f"当前版本还不能直接估计 {normalized_model}，已给出可运行的代码模板。"
+                "请按模板中的说明补全年份、断点或工具变量后运行。"
             ),
         )
 

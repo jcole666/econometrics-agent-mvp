@@ -122,6 +122,9 @@ export interface ModelRequest {
   treatment_column?: string | null;
   running_variable?: string | null;
   instrument_variable?: string | null;
+  policy_period?: number | null;
+  cutoff?: number | null;
+  bandwidth?: number | null;
   llm_config?: LLMConfig | null;
 }
 
@@ -162,6 +165,9 @@ export interface RunModelResponse {
   results: ModelRunResults | null;
   warnings: string[];
   error?: string | null;
+  /** executed=已真实估计；planned=仅提供代码方案 */
+  execution_status?: "executed" | "planned";
+  code_template?: string | null;
 }
 
 export interface ChatMessage {

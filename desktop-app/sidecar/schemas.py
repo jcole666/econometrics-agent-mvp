@@ -21,6 +21,9 @@ class ModelRequest(BaseModel):
     treatment_column: str | None = None
     running_variable: str | None = None
     instrument_variable: str | None = None
+    policy_period: float | None = Field(None, description="DID 政策实施年份；为空时模板保留 TODO 占位。")
+    cutoff: float | None = Field(None, description="RDD 断点；为空时按 0 处理。")
+    bandwidth: float | None = Field(None, description="RDD 带宽；为空时退化为 running 变量标准差。")
     llm_config: LLMConfig | None = None
 
 
@@ -115,6 +118,8 @@ class RunModelResponse(BaseModel):
     results: ModelRunResults | None = None
     warnings: list[str] = Field(default_factory=list)
     error: str | None = None
+    execution_status: str = Field("executed", description="executed=已真实估计；planned=仅提供代码方案")
+    code_template: str | None = Field(None, description="未能真实运行时给出的可运行代码模板")
 
 
 class ReportRequest(BaseModel):

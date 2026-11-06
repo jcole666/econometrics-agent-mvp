@@ -131,8 +131,10 @@ async def run_model_endpoint(
     treatment_column: str | None = Form(None),
     running_variable: str | None = Form(None),
     instrument_variable: str | None = Form(None),
+    policy_period: float | None = Form(None),
+    cutoff: float | None = Form(None),
+    bandwidth: float | None = Form(None),
 ) -> RunModelResponse:
-    _ = (treatment_column, running_variable, instrument_variable)
     try:
         df = await read_upload_dataframe(file)
     except ValueError as exc:
@@ -146,6 +148,12 @@ async def run_model_endpoint(
         independent_variables=xs,
         entity_column=entity_column,
         time_column=time_column,
+        treatment_column=treatment_column,
+        running_variable=running_variable,
+        instrument_variable=instrument_variable,
+        policy_period=policy_period,
+        cutoff=cutoff,
+        bandwidth=bandwidth,
     )
 
 
