@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib import error, request as urlrequest
+from urllib.parse import urlparse
 
 from sidecar.schemas import LLMConfig, ModelRequest
 from sidecar.services.code_generator import generate_code
@@ -21,6 +22,21 @@ def _project_root() -> Path:
 DEFAULT_BASE_URL = "https://api.modelarts-maas.com/openai/v1"
 DEFAULT_MODEL = "deepseek-v4-pro-IckBJP"
 SUPPORTED_MODELS = {"OLS", "Logit", "Panel Fixed Effects", "DID", "IV-2SLS", "RDD"}
+
+# 自定义模型地址白名单：服务端会带着用户的 API Key 请求这个地址，
+# 因此只允许已知的托管服务域名，避免前端把 Key 转发到任意主机。
+DEFAULT_ALLOWED_HOSTS = frozenset(
+    {
+        "api.modelarts-maas.com",
+        "api.openai.com",
+        "api.deepseek.com",
+        "dashscope.aliyuncs.com",
+        "api.moonshot.cn",
+        "open.bigmodel.cn",
+        "ark.cn-beijing.volces.com",
+    }
+)
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class MaasUnavailable(RuntimeError):
@@ -52,12 +68,14 @@ def get_maas_status() -> dict[str, Any]:
     _load_local_env()
     api_key = _get_api_key()
     enabled = not _is_disabled(os.getenv("MAAS_ENABLED", "auto"))
+    base_url = os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
     return {
         "provider": "huawei_maas",
         "enabled": enabled,
         "configured": enabled and bool(api_key),
         "api_key_present": bool(api_key),
-        "base_url": os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
+        "base_url": base_url,
+        "base_url_allowed": is_base_url_allowed(base_url),
         "model": os.getenv("MAAS_MODEL", DEFAULT_MODEL),
     }
 
@@ -101,7 +119,7 @@ def _get_config(llm_config: LLMConfig | None = None) -> MaasConfig:
 
     return MaasConfig(
         api_key=api_key,
-        base_url=os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
+        base_url=_validate_base_url(os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL)),
         model=os.getenv("MAAS_MODEL", DEFAULT_MODEL),
         timeout=_get_timeout(),
     )
@@ -111,17 +129,60 @@ def _has_custom_config(llm_config: LLMConfig | None) -> bool:
     return bool(llm_config and any([llm_config.api_key, llm_config.base_url, llm_config.model]))
 
 
+def _allowed_hosts() -> set[str]:
+    hosts = set(DEFAULT_ALLOWED_HOSTS)
+    for item in os.getenv("MAAS_ALLOWED_HOSTS", "").split(","):
+        candidate = item.strip().lower()
+        if candidate:
+            hosts.add(candidate)
+    return hosts
+
+
+def is_base_url_allowed(base_url: str) -> bool:
+    try:
+        _validate_base_url(base_url)
+    except MaasUnavailable:
+        return False
+    return True
+
+
+def _validate_base_url(base_url: str | None) -> str:
+    """校验模型服务地址，返回去掉尾部斜杠的地址。
+
+    规则：仅允许 https；本机回环允许 http（便于接本地推理服务）；
+    非回环域名必须在白名单内，且地址不得携带账号密码。
+    校验失败抛 MaasUnavailable，由上层降级到本地规则。
+    """
+    raw = (base_url or "").strip()
+    if not raw:
+        raise MaasUnavailable("模型服务地址为空，当前使用本地规则。")
+
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        raise MaasUnavailable("模型服务地址必须以 http:// 或 https:// 开头，当前使用本地规则。")
+    if parsed.username or parsed.password:
+        raise MaasUnavailable("模型服务地址不允许携带账号密码，当前使用本地规则。")
+
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise MaasUnavailable("模型服务地址缺少域名，当前使用本地规则。")
+    if parsed.scheme == "http" and host not in LOOPBACK_HOSTS:
+        raise MaasUnavailable("模型服务地址必须使用 HTTPS（本机回环除外），当前使用本地规则。")
+    if host not in LOOPBACK_HOSTS and host not in _allowed_hosts():
+        raise MaasUnavailable(f"模型服务域名 {host} 不在白名单内，当前使用本地规则。")
+
+    return raw.rstrip("/")
+
+
 def _get_custom_config(llm_config: LLMConfig | None) -> MaasConfig:
     assert llm_config is not None
 
-    base_url = (llm_config.base_url or os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL)).strip().rstrip("/")
+    base_url = _validate_base_url(llm_config.base_url or os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL))
     api_key = (llm_config.api_key or _get_api_key()).strip()
     model = (llm_config.model or os.getenv("MAAS_MODEL", DEFAULT_MODEL)).strip()
 
     if not api_key:
         raise MaasUnavailable("自定义模型缺少 API Key，当前使用本地规则。")
-    if not base_url:
-        raise MaasUnavailable("自定义模型缺少 API 地址，当前使用本地规则。")
     if not model:
         raise MaasUnavailable("自定义模型缺少模型名称，当前使用本地规则。")
 
