@@ -294,6 +294,11 @@ def _parse_json_content(content: str) -> dict[str, Any]:
     return value
 
 
+def parse_json_content(content: str) -> dict[str, Any]:
+    """公开版本：供变量字典、模型解读等模块复用同一套 JSON 提取逻辑。"""
+    return _parse_json_content(content)
+
+
 def _normalize_recommendation(raw: dict[str, Any], fallback: dict[str, Any], request: ModelRequest) -> MaasRecommendation:
     model = str(raw.get("model") or fallback["model"]).strip()
     if model not in SUPPORTED_MODELS:

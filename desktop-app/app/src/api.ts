@@ -9,7 +9,14 @@ import type {
   ModelRecommendation,
   ModelRequest,
   ReportResponse,
-  RunModelResponse
+  RunModelResponse,
+  VariableDictConfirmRequest,
+  VariableDictConfirmResponse,
+  VariableDictInferRequest,
+  VariableDictInferResponse,
+  VariableDictPatchItem,
+  VariableDictPatchPreviewResponse,
+  VariableDictionary
 } from "./types";
 
 const BASE_URL = (import.meta.env.VITE_SIDECAR_URL as string | undefined) ?? "http://127.0.0.1:8768";
@@ -127,3 +134,50 @@ export async function generateReport(
     })
   });
 }
+
+// ---------------------------------------------------------------------------
+// 变量字典
+// ---------------------------------------------------------------------------
+
+export async function inferVariableDict(payload: VariableDictInferRequest): Promise<VariableDictInferResponse> {
+  return requestJson("/variable-dict/infer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function previewVariableDictPatch(
+  message: string,
+  dictionary: VariableDictionary,
+  llmConfig?: LLMConfig | null
+): Promise<VariableDictPatchPreviewResponse> {
+  return requestJson("/variable-dict/patch-preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, dictionary, llm_config: llmConfig ?? null })
+  });
+}
+
+export async function confirmVariableDict(
+  payload: VariableDictConfirmRequest
+): Promise<VariableDictConfirmResponse> {
+  return requestJson("/variable-dict/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getVariableDict(datasetId: string, datasetHash?: string): Promise<VariableDictionary | null> {
+  const query = new URLSearchParams({ dataset_id: datasetId });
+  if (datasetHash) query.set("dataset_hash", datasetHash);
+  const response = await fetch(`${BASE_URL}/variable-dict?${query.toString()}`, withToken());
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error("读取变量字典失败。");
+  }
+  return (await response.json()) as VariableDictionary;
+}
+
+export type { VariableDictPatchItem };

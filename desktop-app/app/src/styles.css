@@ -2699,3 +2699,91 @@ body.resizing-panels * {
   text-align: center;
   font-size: 13px;
 }
+
+/* 变量字典 */
+.vdict {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vdict-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vdict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.vdict-table {
+  min-width: 660px;
+}
+.vdict-table td,
+.vdict-table th {
+  white-space: nowrap;
+}
+.vdict-input {
+  width: 100%;
+  min-width: 76px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-family: inherit;
+}
+.vdict-input:focus {
+  outline: none;
+  border-color: var(--line-strong);
+}
+.vdict-badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.vdict-badge-ok {
+  border-color: #b9c6b4;
+  background: #f3f7f1;
+  color: #3f5b3a;
+}
+.vdict-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vdict-chat-row {
+  display: flex;
+  gap: 8px;
+}
+.vdict-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-3);
+  padding: 10px;
+}
+.vdict-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vdict-preview-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.vdict-preview-list strong {
+  white-space: nowrap;
+}

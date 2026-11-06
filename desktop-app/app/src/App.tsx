@@ -29,11 +29,15 @@ import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffec
 
 import {
   chat,
+  confirmVariableDict,
   generateReport,
   getHealth,
+  getVariableDict,
+  inferVariableDict,
   inferVariables,
   loadSampleFile,
   loadSampleProfile,
+  previewVariableDictPatch,
   profileData,
   recommendModel,
   runModel
@@ -59,6 +63,14 @@ import {
 import { ChatMessageBody, MarkdownBody, ThinkingMessage } from "./markdown";
 import { saveReportMarkdown, saveReportPdf } from "./reportExport";
 import { dtypeLabel } from "./dtypeLabel";
+import { VariableDictionaryPanel } from "./components/VariableDictionaryPanel";
+import {
+  datasetIdentity,
+  readCachedDictionary,
+  writeCachedDictionary,
+  type DatasetIdentity
+} from "./projectStore";
+import { displayName } from "./variableDictionary";
 import {
   buildSampleRequest,
   isSampleProfile,
@@ -95,8 +107,12 @@ import type {
   InferVariablesResponse,
   ModelRecommendation,
   ModelRequest,
+  ProfileColumn,
   RelationshipHint,
-  RunModelResponse
+  RunModelResponse,
+  VariableDictPatchItem,
+  VariableDictPatchPreviewResponse,
+  VariableDictionary
 } from "./types";
 
 const QUESTION_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.question}`;
@@ -104,7 +120,7 @@ const COLUMNS_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.columns}`;
 const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.dependentVariable}`;
 const INDEPENDENT_VARIABLES_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.independentVariables}`;
 const CHAT_PLACEHOLDER = "例如：为什么推荐这个模型？";
-type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample";
+type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample" | "dictionary";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
 
@@ -596,6 +612,9 @@ export default function App() {
   const [modelType, setModelType] = useState("OLS");
   const [runResult, setRunResult] = useState<RunModelResponse | null>(null);
   const [runNotice, setRunNotice] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<DatasetIdentity | null>(null);
+  const [dictionary, setDictionary] = useState<VariableDictionary | null>(null);
+  const [dictionaryNotice, setDictionaryNotice] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatSearch, setChatSearch] = useState("");
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
@@ -973,6 +992,9 @@ export default function App() {
 
   function resetAnalysisForNewFile() {
     setProfile(null);
+    setIdentity(null);
+    setDictionary(null);
+    setDictionaryNotice(null);
     setColumnsInput("");
     setDependentVariable("");
     setIndependentVariables("");
@@ -1109,6 +1131,7 @@ export default function App() {
       setColumnsInput(next.columns.map((column) => column.name).join(", "));
       setActiveStep(1);
       setStatus("字段画像已生成。");
+      void refreshDatasetContext(file);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "字段画像生成失败。");
     } finally {
@@ -1119,6 +1142,7 @@ export default function App() {
   function applySampleState(sampleFile: File, sampleProfile: DataProfile) {
     setFile(sampleFile);
     setProfile(sampleProfile);
+    void refreshDatasetContext(sampleFile);
     setQuestion(SAMPLE_SCENARIO.question);
     setColumnsInput(sampleProfile.columns.map((column) => column.name).join(", "));
     setDependentVariable(SAMPLE_SCENARIO.dependentVariable);
@@ -1212,6 +1236,125 @@ export default function App() {
       setStatus("变量识别完成。");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "变量识别失败。");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * 换了文件就重算 dataset_id / dataset_hash，并尝试恢复已保存的变量字典。
+   * 字典服务端是权威，localStorage 只是首屏缓存。
+   */
+  async function refreshDatasetContext(nextFile: File | null) {
+    if (!nextFile) {
+      setIdentity(null);
+      setDictionary(null);
+      setDictionaryNotice(null);
+      return;
+    }
+    try {
+      const nextIdentity = await datasetIdentity(nextFile);
+      setIdentity(nextIdentity);
+      const cached = readCachedDictionary(nextIdentity.dataset_id, nextIdentity.dataset_hash);
+      setDictionary(cached);
+      setDictionaryNotice(null);
+      const stored = await getVariableDict(nextIdentity.dataset_id, nextIdentity.dataset_hash);
+      if (stored) {
+        setDictionary(stored);
+        writeCachedDictionary(stored);
+      }
+    } catch (error) {
+      setIdentity(null);
+      setDictionary(null);
+      setDictionaryNotice(error instanceof Error ? `变量字典读取失败：${error.message}` : "变量字典读取失败。");
+    }
+  }
+
+  async function ensureIdentity(): Promise<DatasetIdentity | null> {
+    if (identity) return identity;
+    if (!file) return null;
+    const next = await datasetIdentity(file);
+    setIdentity(next);
+    return next;
+  }
+
+  async function inferDictionary() {
+    if (!profile) {
+      setDictionaryNotice("请先生成字段画像，再推断变量含义。");
+      return;
+    }
+    const current = await ensureIdentity();
+    if (!current) {
+      setDictionaryNotice("请先选择数据文件。");
+      return;
+    }
+
+    setBusy("dictionary");
+    setDictionaryNotice(null);
+    try {
+      const response = await inferVariableDict({
+        research_question: question.trim(),
+        dataset_id: current.dataset_id,
+        dataset_hash: current.dataset_hash,
+        columns: profile.columns,
+        existing: dictionary,
+        llm_config: llmConfig
+      });
+      setDictionary(response.dictionary);
+      writeCachedDictionary(response.dictionary);
+      setDictionaryNotice(
+        response.maas_error
+          ? `已用本地规则生成：${response.maas_error}`
+          : `变量字典已生成（${response.provider === "rules" ? "本地规则" : "模型"}），请逐列核对后点「保存并确认」。`
+      );
+      setStatus("变量字典已生成。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "变量字典生成失败。";
+      setDictionaryNotice(message);
+      setStatus(message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function previewDictionary(message: string): Promise<VariableDictPatchPreviewResponse | null> {
+    if (!dictionary) return null;
+    try {
+      const response = await previewVariableDictPatch(message, dictionary, llmConfig);
+      if (response.maas_error) {
+        setDictionaryNotice(`仅用本地规则解析：${response.maas_error}`);
+      }
+      return response;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "解析修改失败。";
+      setDictionaryNotice(text);
+      return null;
+    }
+  }
+
+  async function confirmDictionary(patches: VariableDictPatchItem[]): Promise<boolean> {
+    if (!dictionary) return false;
+    const current = await ensureIdentity();
+    if (!current) return false;
+
+    setBusy("dictionary");
+    setDictionaryNotice(null);
+    try {
+      const response = await confirmVariableDict({
+        dataset_id: current.dataset_id,
+        dataset_hash: current.dataset_hash,
+        patches,
+        dictionary
+      });
+      setDictionary(response.dictionary);
+      writeCachedDictionary(response.dictionary);
+      setStatus("变量字典已更新并保存。");
+      return true;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "变量字典保存失败。";
+      setDictionaryNotice(text);
+      setStatus(text);
+      return false;
     } finally {
       setBusy(null);
     }
@@ -1668,8 +1811,11 @@ export default function App() {
                     {profile ? (
                       <>
                         <Panel title="字段画像" icon={<TableProperties size={17} />}>
-                          <RelationshipMap hints={profile.diagnostics?.relationship_hints?.slice(0, 8) ?? []} />
-                          <ProfileTable profile={profile} />
+                          <RelationshipMap
+                            hints={profile.diagnostics?.relationship_hints?.slice(0, 8) ?? []}
+                            dictionary={dictionary}
+                          />
+                          <ProfileTable profile={profile} dictionary={dictionary} />
                         </Panel>
                       </>
                     ) : (
@@ -1720,6 +1866,19 @@ export default function App() {
                         <VariableColumnReference profile={profile} />
                       </div>
                     </Panel>
+                    {profile ? (
+                      <Panel title="变量字典" icon={<Wand2 size={17} />}>
+                        <VariableDictionaryPanel
+                          columns={profile.columns}
+                          dictionary={dictionary}
+                          busy={busy === "dictionary"}
+                          notice={dictionaryNotice}
+                          onInfer={inferDictionary}
+                          onPreview={previewDictionary}
+                          onConfirm={confirmDictionary}
+                        />
+                      </Panel>
+                    ) : null}
                   </div>
                 ) : activeStep === 3 ? (
                   <div className="dynamic-stack">
@@ -1762,7 +1921,7 @@ export default function App() {
                     ) : null}
                     {runResult ? (
                       <Panel title="模型结果" icon={<Activity size={17} />}>
-                        <RunResultView result={runResult} notice={runNotice} />
+                        <RunResultView result={runResult} notice={runNotice} dictionary={dictionary} />
                       </Panel>
                     ) : null}
                   </div>
@@ -1800,7 +1959,7 @@ export default function App() {
                     </Panel>
                     {runResult ? (
                       <Panel title="模型结果" icon={<Activity size={17} />}>
-                        <RunResultView result={runResult} notice={runNotice} />
+                        <RunResultView result={runResult} notice={runNotice} dictionary={dictionary} />
                       </Panel>
                     ) : null}
                   </div>
@@ -2390,7 +2549,7 @@ function DataQualityBrief({
   );
 }
 
-function ProfileTable({ profile }: { profile: DataProfile | null }) {
+function ProfileTable({ profile, dictionary }: { profile: DataProfile | null; dictionary?: VariableDictionary | null }) {
   if (!profile) {
     return <div className="empty">尚未生成字段画像。</div>;
   }
@@ -2413,6 +2572,7 @@ function ProfileTable({ profile }: { profile: DataProfile | null }) {
           <thead>
             <tr>
               <th>字段名</th>
+              <th>中文名</th>
               <th>类型判断</th>
               <th>原始类型</th>
               <th>缺失</th>
@@ -2425,6 +2585,9 @@ function ProfileTable({ profile }: { profile: DataProfile | null }) {
             {profile.columns.map((column) => (
               <tr key={column.name}>
                 <td title={column.name}>{column.name}</td>
+                <td title={dictionary?.entries?.[column.name]?.description ?? ""}>
+                  {dictionary?.entries?.[column.name]?.label ?? <span className="note">待确认</span>}
+                </td>
                 <td>{column.kind ?? "未知"}</td>
                 <td>{dtypeLabel(column.dtype)}</td>
                 <td>{column.missing}</td>
@@ -2546,7 +2709,7 @@ function DataDiagnosticsView({ profile }: { profile: DataProfile }) {
   );
 }
 
-function RelationshipMap({ hints }: { hints: RelationshipHint[] }) {
+function RelationshipMap({ hints, dictionary }: { hints: RelationshipHint[]; dictionary?: VariableDictionary | null }) {
   const names = Array.from(new Set(hints.flatMap((item) => [item.left, item.right]))).slice(0, 6);
   if (names.length < 2) return null;
 
@@ -2582,7 +2745,7 @@ function RelationshipMap({ hints }: { hints: RelationshipHint[] }) {
         })}
         {names.map((name, index) => {
           const point = positions.get(name)!;
-          const label = variableLabelParts(name);
+          const label = variableLabelParts(displayName(name, dictionary));
           return (
             <g className={index === 0 ? "relationship-node relationship-node-main" : "relationship-node"} key={name}>
               <title>{name}</title>
@@ -2599,7 +2762,7 @@ function RelationshipMap({ hints }: { hints: RelationshipHint[] }) {
         })}
       </svg>
       <div className="relationship-map-note">
-        <strong>{names[0]}</strong>
+        <strong>{displayName(names[0], dictionary)}</strong>
         <span>与 {names.length - 1} 个变量形成明显连接</span>
       </div>
     </div>
@@ -2801,7 +2964,15 @@ function RecommendationView({
   );
 }
 
-function RunResultView({ result, notice }: { result: RunModelResponse | null; notice: string | null }) {
+function RunResultView({
+  result,
+  notice,
+  dictionary
+}: {
+  result: RunModelResponse | null;
+  notice: string | null;
+  dictionary?: VariableDictionary | null;
+}) {
   if (notice) {
     return <div className="empty">{notice}</div>;
   }
@@ -2826,7 +2997,7 @@ function RunResultView({ result, notice }: { result: RunModelResponse | null; no
         </p>
       ))}
       <ResultInterpretation result={result} />
-      <CoefficientTable coefficients={result.results.coefficients} />
+      <CoefficientTable coefficients={result.results.coefficients} dictionary={dictionary} />
     </div>
   );
 }
@@ -2864,7 +3035,7 @@ function ResultInterpretation({ result }: { result: RunModelResponse }) {
   );
 }
 
-function CoefficientTable({ coefficients }: { coefficients: CoefficientResult[] }) {
+function CoefficientTable({ coefficients, dictionary }: { coefficients: CoefficientResult[]; dictionary?: VariableDictionary | null }) {
   return (
     <table>
       <thead>
@@ -2879,7 +3050,11 @@ function CoefficientTable({ coefficients }: { coefficients: CoefficientResult[] 
       <tbody>
         {coefficients.map((item) => (
           <tr key={item.variable}>
-            <td>{translateVariable(item.variable)}</td>
+            <td title={item.variable}>
+              {displayName(item.variable, dictionary) !== item.variable
+                ? displayName(item.variable, dictionary)
+                : translateVariable(item.variable)}
+            </td>
             <td>{formatNumber(item.coefficient)}</td>
             <td>{formatNumber(item.std_error)}</td>
             <td>{formatNumber(item.t_statistic)}</td>

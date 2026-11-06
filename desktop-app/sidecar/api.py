@@ -19,6 +19,13 @@ from sidecar.schemas import (
     ReportRequest,
     ReportResponse,
     RunModelResponse,
+    VariableDictConfirmRequest,
+    VariableDictConfirmResponse,
+    VariableDictInferRequest,
+    VariableDictInferResponse,
+    VariableDictPatchPreviewRequest,
+    VariableDictPatchPreviewResponse,
+    VariableDictionary,
 )
 from sidecar.services.chat_service import chat_with_agent
 from sidecar.services.code_generator import generate_code
@@ -28,6 +35,12 @@ from sidecar.services.maas_client import MaasUnavailable, get_maas_recommendatio
 from sidecar.services.model_runner import run_model
 from sidecar.services.model_selector import select_model
 from sidecar.services.report_generator import generate_markdown_report
+from sidecar.services.variable_dictionary import (
+    confirm_patches,
+    get_dictionary,
+    infer_dictionary,
+    preview_patch,
+)
 from sidecar.services.variable_inferrer import infer_variables
 
 def app_root() -> Path:
@@ -113,6 +126,41 @@ def sample_data() -> FileResponse:
 @app.post("/infer-variables", response_model=InferVariablesResponse)
 def infer_variables_endpoint(request: InferVariablesRequest) -> InferVariablesResponse:
     return infer_variables(request)
+
+
+@app.post("/variable-dict/infer", response_model=VariableDictInferResponse)
+def variable_dict_infer(request: VariableDictInferRequest) -> VariableDictInferResponse:
+    return infer_dictionary(request)
+
+
+@app.post("/variable-dict/patch-preview", response_model=VariableDictPatchPreviewResponse)
+def variable_dict_patch_preview(request: VariableDictPatchPreviewRequest) -> VariableDictPatchPreviewResponse:
+    return preview_patch(request)
+
+
+@app.post("/variable-dict/confirm", response_model=VariableDictConfirmResponse)
+def variable_dict_confirm(request: VariableDictConfirmRequest) -> VariableDictConfirmResponse:
+    try:
+        dictionary = confirm_patches(
+            dataset_id=request.dataset_id,
+            dataset_hash=request.dataset_hash,
+            patches=request.patches,
+            dictionary=request.dictionary,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return VariableDictConfirmResponse(dictionary=dictionary)
+
+
+@app.get("/variable-dict", response_model=VariableDictionary)
+def variable_dict_get(dataset_id: str, dataset_hash: str | None = None) -> VariableDictionary:
+    try:
+        dictionary = get_dictionary(dataset_id, dataset_hash)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if dictionary is None:
+        raise HTTPException(status_code=404, detail="尚未为当前数据集保存变量字典。")
+    return dictionary
 
 
 @app.post("/recommend-model", response_model=ModelRecommendation)
