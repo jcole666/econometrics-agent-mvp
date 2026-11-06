@@ -2787,3 +2787,112 @@ body.resizing-panels * {
 .vdict-preview-list strong {
   white-space: nowrap;
 }
+
+/* 关系图增强 */
+.rel-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rel-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.rel-tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rel-tab-active {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+.rel-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.rel-controls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.rel-controls select {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.rel-check {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.rel-metrics {
+  display: flex;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.rel-canvas {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 6px;
+}
+.rel-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.rel-caption {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.rel-caption > div {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-3);
+  padding: 8px 10px;
+}
+.rel-caption span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.rel-caption p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.rel-warnings {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (max-width: 980px) {
+  .rel-caption {
+    grid-template-columns: 1fr;
+  }
+}

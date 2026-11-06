@@ -9,7 +9,9 @@ import type {
   ModelRecommendation,
   ModelRequest,
   ReportResponse,
+  CorrHeatmapResponse,
   RunModelResponse,
+  ScatterResponse,
   VariableDictConfirmRequest,
   VariableDictConfirmResponse,
   VariableDictInferRequest,
@@ -181,3 +183,22 @@ export async function getVariableDict(datasetId: string, datasetHash?: string): 
 }
 
 export type { VariableDictPatchItem };
+
+// ---------------------------------------------------------------------------
+// 关系图统计（数字由 Python 计算）
+// ---------------------------------------------------------------------------
+
+export async function fetchScatter(file: File, xColumn: string, yColumn: string): Promise<ScatterResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("x_column", xColumn);
+  form.append("y_column", yColumn);
+  return requestJson("/relationship/scatter", { method: "POST", body: form });
+}
+
+export async function fetchCorrHeatmap(file: File, columns: string[]): Promise<CorrHeatmapResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("columns", columns.join(","));
+  return requestJson("/relationship/corr-heatmap", { method: "POST", body: form });
+}

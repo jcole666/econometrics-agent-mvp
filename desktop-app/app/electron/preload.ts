@@ -26,5 +26,8 @@ contextBridge.exposeInMainWorld("workbench", {
   },
   saveReportPdf: (payload: { fileName: string; title: string; markdown: string }) => {
     return ipcRenderer.invoke("save-report-pdf", payload);
+  },
+  saveImageFile: (payload: { fileName: string; dataUrl: string }) => {
+    return ipcRenderer.invoke("save-image-file", payload);
   }
 });
