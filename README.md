@@ -140,3 +140,25 @@ npm --prefix app run typecheck
 可用键位见 `.env.example`：`MAAS_API_KEY`、`MAAS_BASE_URL`、`MAAS_MODEL`、`MAAS_ENABLED`、`MAAS_TIMEOUT`、`MAAS_ALLOWED_HOSTS`。
 
 `MAAS_BASE_URL` 只允许 HTTPS，且域名必须命中白名单（本机回环地址可用 HTTP，便于接本地推理服务）；需要新增域名时用 `MAAS_ALLOWED_HOSTS` 逗号分隔追加。启动后可访问 `http://127.0.0.1:8768/health` 查看 `maas.configured` 与 `maas.config_file`，确认配置是否被读到。
+
+## 本机安全边界
+
+- 分析服务只监听 `127.0.0.1`，不对局域网开放。
+- 桌面应用启动时生成一次随机令牌，通过环境变量交给服务；前端所有请求都带 `X-Xiaoji-Token`。本机其他进程没有这个令牌就调不动接口，`/health` 保持公开供健康检查。
+- 模型请求地址（`base_url`）只允许 HTTPS 且必须命中域名白名单，避免服务端带着你的 API Key 请求任意主机。
+
+## 测试与持续集成
+
+```bash
+cd desktop-app
+../.venv/Scripts/python -m pytest sidecar/tests -q     # 49 passed
+
+cd app
+npm run typecheck
+```
+
+推送时 GitHub Actions 会跑同一套检查，配置见 `.github/workflows/ci.yml`。
+
+## 许可
+
+MIT，见 [LICENSE](LICENSE)。
