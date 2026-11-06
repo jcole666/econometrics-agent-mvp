@@ -629,6 +629,9 @@ export default function App() {
   const [runResult, setRunResult] = useState<RunModelResponse | null>(null);
   const [runNotice, setRunNotice] = useState<string | null>(null);
   const [identity, setIdentity] = useState<DatasetIdentity | null>(null);
+  // 文件也用 ref 留一份：示例场景在同一段异步流程里刚设好文件就要算 hash / 存版本，
+  // 此时 state 还是旧值，读 ref 才拿得到当前文件。
+  const fileRef = useRef<File | null>(null);
   const [dictionary, setDictionary] = useState<VariableDictionary | null>(null);
   const [dictionaryNotice, setDictionaryNotice] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<ModelExplanation | null>(null);
@@ -1049,6 +1052,7 @@ export default function App() {
   }
 
   function setSelectedFile(next: File | null) {
+    fileRef.current = next;
     setFile(next);
     resetAnalysisForNewFile();
   }
@@ -1172,6 +1176,7 @@ export default function App() {
   }
 
   function applySampleState(sampleFile: File, sampleProfile: DataProfile) {
+    fileRef.current = sampleFile;
     setFile(sampleFile);
     setProfile(sampleProfile);
     void refreshDatasetContext(sampleFile);
@@ -1359,8 +1364,9 @@ export default function App() {
 
   async function ensureIdentity(): Promise<DatasetIdentity | null> {
     if (identity) return identity;
-    if (!file) return null;
-    const next = await datasetIdentity(file);
+    const currentFile = fileRef.current ?? file;
+    if (!currentFile) return null;
+    const next = await datasetIdentity(currentFile);
     setIdentity(next);
     return next;
   }
@@ -2059,7 +2065,12 @@ export default function App() {
                     {profile ? (
                       <>
                         <Panel title="字段画像" icon={<TableProperties size={17} />}>
-                          <RelationshipCharts file={file} profile={profile} dictionary={dictionary} />
+                          <RelationshipCharts
+                            file={file}
+                            profile={profile}
+                            dictionary={dictionary}
+                            outcome={dependentVariable.trim() || undefined}
+                          />
                           <ProfileTable profile={profile} dictionary={dictionary} />
                         </Panel>
                       </>

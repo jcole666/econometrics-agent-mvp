@@ -140,17 +140,17 @@ def _metrics_diff(left: ModelRunRecord, right: ModelRunRecord) -> dict[str, Any]
             }
         )
 
-    return {
+    metrics: dict[str, Any] = {
         "sample_size": {"left": left_results.sample_size, "right": right_results.sample_size},
-        "r_squared": {
-            "left": left_results.r_squared,
-            "right": right_results.r_squared,
-            "delta": _delta(left_results.r_squared, right_results.r_squared),
-        },
-        "r_squared_adjusted": {
-            "left": left_results.r_squared_adjusted,
-            "right": right_results.r_squared_adjusted,
-            "delta": _delta(left_results.r_squared_adjusted, right_results.r_squared_adjusted),
-        },
         "coefficients": coefficients,
     }
+    # 两种拟合指标按可用性输出：面板固定效应常没有调整后 R²，
+    # 若两边都是 None 就不下发，避免前端渲染出一行全「—」。
+    for key, left_value, right_value in (
+        ("r_squared", left_results.r_squared, right_results.r_squared),
+        ("r_squared_adjusted", left_results.r_squared_adjusted, right_results.r_squared_adjusted),
+    ):
+        if left_value is None and right_value is None:
+            continue
+        metrics[key] = {"left": left_value, "right": right_value, "delta": _delta(left_value, right_value)}
+    return metrics

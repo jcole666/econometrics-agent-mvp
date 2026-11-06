@@ -18,19 +18,54 @@ interface Props {
   file: File | null;
   profile: DataProfile;
   dictionary: VariableDictionary | null;
+  /** 当前被解释变量：散点默认把它放在纵轴，横轴取与它最相关的那一列。 */
+  outcome?: string;
 }
 
-export function RelationshipCharts({ file, profile, dictionary }: Props) {
+export function RelationshipCharts({ file, profile, dictionary, outcome }: Props) {
   const numericColumns = useMemo(
     () => profile.columns.filter((column) => column.kind === "数值").map((column) => column.name),
     [profile]
   );
   const hints = profile.diagnostics?.relationship_hints ?? [];
 
+  // 默认散点不取「前两列」（往往第一列是年份这种索引列），优先用画像里相关最强的一对，
+  // 并保证被解释变量落在纵轴，读者一眼能对上研究问题。
+  const defaultPair = useMemo(() => {
+    const numericKey = numericColumns.join("|");
+    const candidates = hints.filter(
+      (item) => numericColumns.includes(item.left) && numericColumns.includes(item.right)
+    );
+    const hint = candidates[0];
+    if (!hint) {
+      return { x: numericColumns[0] ?? "", y: numericColumns[1] ?? numericColumns[0] ?? "" };
+    }
+    if (outcome && hint.left === outcome) return { x: hint.right, y: hint.left };
+    if (outcome && hint.right === outcome) return { x: hint.left, y: hint.right };
+    return { x: hint.left, y: hint.right };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hints, outcome, numericColumns.join("|")]);
+
+  const defaultHeatColumns = useMemo(() => {
+    const ordered: string[] = [];
+    const push = (name: string) => {
+      if (numericColumns.includes(name) && !ordered.includes(name)) ordered.push(name);
+    };
+    push(defaultPair.x);
+    push(defaultPair.y);
+    for (const item of hints) {
+      push(item.left);
+      push(item.right);
+    }
+    for (const name of numericColumns) push(name);
+    return ordered.slice(0, 4);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultPair.x, defaultPair.y, hints, numericColumns.join("|")]);
+
   const [view, setView] = useState<ChartView>("network");
-  const [xColumn, setXColumn] = useState(numericColumns[0] ?? "");
-  const [yColumn, setYColumn] = useState(numericColumns[1] ?? numericColumns[0] ?? "");
-  const [heatColumns, setHeatColumns] = useState<string[]>(numericColumns.slice(0, 4));
+  const [xColumn, setXColumn] = useState("");
+  const [yColumn, setYColumn] = useState("");
+  const [heatColumns, setHeatColumns] = useState<string[]>([]);
   const [scatter, setScatter] = useState<ScatterResponse | null>(null);
   const [heatmap, setHeatmap] = useState<CorrHeatmapResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,15 +77,13 @@ export function RelationshipCharts({ file, profile, dictionary }: Props) {
   }, []);
 
   useEffect(() => {
-    setXColumn((current) => (numericColumns.includes(current) ? current : numericColumns[0] ?? ""));
-    setYColumn((current) =>
-      numericColumns.includes(current) ? current : numericColumns[1] ?? numericColumns[0] ?? ""
-    );
+    setXColumn((current) => (numericColumns.includes(current) ? current : defaultPair.x));
+    setYColumn((current) => (numericColumns.includes(current) ? current : defaultPair.y));
     setHeatColumns((current) => {
       const kept = current.filter((column) => numericColumns.includes(column));
-      return kept.length >= 2 ? kept : numericColumns.slice(0, 4);
+      return kept.length >= 2 ? kept : defaultHeatColumns;
     });
-  }, [numericColumns.join("|")]);
+  }, [numericColumns.join("|"), defaultPair.x, defaultPair.y, defaultHeatColumns.join(",")]);
 
   useEffect(() => {
     if (view !== "scatter" || !file || !xColumn || !yColumn || xColumn === yColumn) return;
@@ -431,6 +464,7 @@ function HeatmapChart({
       role="img"
       aria-label="相关系数热力图"
       className="rel-svg"
+      style={{ maxWidth: `${width}px` }}
     >
       <title>相关系数热力图</title>
       <rect x={0} y={0} width={width} height={height} fill="#ffffff" />

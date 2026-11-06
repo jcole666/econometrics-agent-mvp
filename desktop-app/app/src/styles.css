@@ -2826,6 +2826,7 @@ body.resizing-panels * {
   display: flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 .rel-controls select {
   border: 1px solid var(--line);
