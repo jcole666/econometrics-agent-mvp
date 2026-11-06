@@ -19,3 +19,4 @@ sidecar-dist/
 desktop-workbench/
 .claude/
 tmp/
+release-*/
