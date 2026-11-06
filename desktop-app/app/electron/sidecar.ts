@@ -22,6 +22,15 @@ function pythonPath(root: string) {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? "python";
 }
 
+/**
+ * 源码模式下 sidecar 包位于 desktop-app/，必须在该目录启动，
+ * 否则 `python -m sidecar.serve` 会报 No module named 'sidecar'。
+ */
+function sidecarWorkdir(root: string) {
+  const desktopApp = path.join(root, "desktop-app");
+  return fs.existsSync(path.join(desktopApp, "sidecar")) ? desktopApp : root;
+}
+
 function packagedSidecarPath() {
   const name = process.platform === "win32" ? "econometrics-sidecar.exe" : "econometrics-sidecar";
   return path.join(process.resourcesPath, "sidecar", "econometrics-sidecar", name);
@@ -40,7 +49,7 @@ export function startSidecar() {
   const usePackagedSidecar = hasPackagedSidecar();
   const command = usePackagedSidecar ? packagedSidecarPath() : pythonPath(root);
   const args = usePackagedSidecar ? ["--port", String(SIDECAR_PORT)] : ["-m", "sidecar.serve", "--port", String(SIDECAR_PORT)];
-  const cwd = usePackagedSidecar ? path.dirname(command) : root;
+  const cwd = usePackagedSidecar ? path.dirname(command) : sidecarWorkdir(root);
 
   if ((app.isPackaged || process.env.NODE_ENV === "production") && !fs.existsSync(command)) {
     throw new Error(`找不到本地分析服务程序：${command}`);

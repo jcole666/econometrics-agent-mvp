@@ -24,31 +24,57 @@ SHA256 9893534ECC6918AE5BB4783F10D448CF039F6212057B75225F78F9F6E3F34B8C
 
 从下一个版本起，每个 Release 会同时附上同名的 `.sha256` 文件，下载后可用 `Get-FileHash .\<exe> -Algorithm SHA256` 比对。
 
-## 直接打开
+## 从源码运行
 
-在项目根目录双击：
+仓库里**不含** `小计.exe`（打包产物，已被 `.gitignore` 忽略），clone 下来后请二选一。
 
-```text
-小计.exe
+**方式一：下载发布版**（推荐，只需双击）—— 见上一节，不需要 Python 和 Node。
+
+**方式二：源码运行**（需要 Python 3.10+ 与 Node.js 20.19+，Vite 7 的最低要求）：
+
+```powershell
+# 1. 仓库根目录建虚拟环境并安装后端依赖
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r desktop-app\sidecar\requirements.txt
+
+# 2. 安装前端依赖
+cd desktop-app\app
+npm install
 ```
 
-如果根目录还没有这个文件，先运行一次打包脚本：
+然后开两个终端，都停在 `desktop-app\app`：
+
+```powershell
+npm run dev:renderer   # 终端 A：Vite 开发服务器，127.0.0.1:5173
+npm run dev:electron   # 终端 B：Electron 主进程，会自动拉起 sidecar（127.0.0.1:8768）
+```
+
+只想起后端排查接口问题：
+
+```powershell
+cd desktop-app
+..\.venv\Scripts\python -m sidecar.serve --port 8768
+```
+
+## 自行打包
 
 ```powershell
 .\package-windows.ps1
 ```
 
-脚本会生成正式文件，并自动同步一份到根目录：
+脚本会先构建前端与 sidecar，再用 electron-builder 打出免安装 exe，并同步一份到仓库根目录：
 
 ```text
 小计.exe
 ```
 
-原始打包产物仍保留在：
+原始产物保留在：
 
 ```text
 desktop-app\app\release\Econometrics-Agent-Workbench-<版本号>-portable.exe
 ```
+
+打包会读取你本机的 `.env`（仓库根或 `%APPDATA%\EconometricsAgent\`），但 `.env` 不会被打进 exe。
 
 ## 快速体验
 
