@@ -3130,3 +3130,18 @@ body.resizing-panels * {
   font-size: 12px;
   line-height: 1.6;
 }
+
+/* 画像范围列 / 样例值编码还原 */
+.numeric-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sample-decoded {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.vdict-input-wide {
+  min-width: 132px;
+}

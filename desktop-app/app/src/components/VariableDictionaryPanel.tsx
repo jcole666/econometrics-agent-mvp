@@ -23,6 +23,8 @@ interface DraftRow {
   description: string;
   type: VariableSemanticType;
   unit: string;
+  /** 编码用单行文本编辑：`1=高一;2=高二`，落库前转回 Record<string, string>。 */
+  valueLabels: string;
 }
 
 interface Props {
@@ -54,7 +56,8 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
         label: entry?.label ?? "",
         description: entry?.description ?? "",
         type: entry?.type ?? "unknown",
-        unit: entry?.unit ?? ""
+        unit: entry?.unit ?? "",
+        valueLabels: labelsToText(entry?.value_labels)
       };
     }
     setDraft(next);
@@ -79,8 +82,14 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
       if (row.description.trim() !== (entry?.description ?? "")) after.description = row.description.trim();
       if (row.type !== (entry?.type ?? "unknown")) after.type = row.type;
       if (row.unit.trim() !== (entry?.unit ?? "")) after.unit = row.unit.trim();
+      // 编码：文本形式一致就不提交；改了（含清空）就把整份映射发过去，后端整体覆盖。
+      if (row.valueLabels.trim() !== labelsToText(entry?.value_labels).trim()) {
+        after.value_labels = textToLabels(row.valueLabels);
+      }
       if (Object.keys(after).length === 0) continue;
-      const clean = Object.fromEntries(Object.entries(after).filter(([, value]) => value !== ""));
+      const clean = Object.fromEntries(
+        Object.entries(after).filter(([, value]) => value !== "" || typeof value === "object")
+      );
       if (Object.keys(clean).length === 0) continue;
       patches.push({
         column: column.name,
@@ -88,7 +97,8 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
           label: entry?.label ?? null,
           description: entry?.description ?? null,
           type: entry?.type ?? "unknown",
-          unit: entry?.unit ?? null
+          unit: entry?.unit ?? null,
+          value_labels: entry?.value_labels ?? {}
         },
         after: clean,
         op: "update"
@@ -174,6 +184,7 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
                 <th>含义</th>
                 <th>类型</th>
                 <th>单位</th>
+                <th>编码</th>
                 <th>可信度</th>
                 <th>状态</th>
               </tr>
@@ -218,6 +229,15 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
                         value={row.unit}
                         placeholder="无"
                         onChange={(event) => updateRow(column.name, { unit: event.target.value })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="vdict-input vdict-input-wide"
+                        value={row.valueLabels}
+                        placeholder="如 1=高一;2=高二"
+                        title="只写元数据，不改原始数据。格式：编码=含义，用 ; 分隔"
+                        onChange={(event) => updateRow(column.name, { valueLabels: event.target.value })}
                       />
                     </td>
                     <td>{entry?.confidence != null ? `${Math.round(entry.confidence * 100)}%` : "—"}</td>
@@ -275,7 +295,7 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
                             {item.op === "confirm"
                               ? "标记为已确认"
                               : Object.entries(item.after)
-                                  .map(([key, value]) => `${fieldLabel(key)} → ${String(value)}`)
+                                  .map(([key, value]) => `${fieldLabel(key)} → ${formatPatchValue(key, value)}`)
                                   .join("；")}
                           </span>
                         </label>
@@ -296,7 +316,43 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
 }
 
 function emptyRow(): DraftRow {
-  return { label: "", description: "", type: "unknown", unit: "" };
+  return { label: "", description: "", type: "unknown", unit: "", valueLabels: "" };
+}
+
+/** Record<string,string> → `1=高一;2=高二`（按编码自然序，避免 10 跑到 2 前面）。 */
+function labelsToText(labels: Record<string, string> | null | undefined): string {
+  if (!labels) return "";
+  return Object.entries(labels)
+    .sort(([left], [right]) => left.localeCompare(right, "zh-CN", { numeric: true }))
+    .map(([code, meaning]) => `${code}=${meaning}`)
+    .join(";");
+}
+
+/** `1=高一;2=高二` → Record。中文分号、逗号、换行都当分隔符；只写元数据，不碰原始数据。 */
+function textToLabels(text: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const parts = text.split(/[;；,，\n\r]+/);
+  for (const part of parts) {
+    const item = part.trim();
+    if (!item) continue;
+    const match = item.match(/^(.+?)\s*[=＝:：]\s*(.+)$/);
+    if (!match) continue;
+    const code = match[1].trim();
+    const meaning = match[2].trim();
+    if (!code || !meaning) continue;
+    result[code] = meaning.slice(0, 40);
+    if (Object.keys(result).length >= 20) break;
+  }
+  return result;
+}
+
+/** 预览里把 value_labels 这类对象值渲染成人话，而不是 [object Object]。 */
+function formatPatchValue(key: string, value: unknown): string {
+  if (key === "value_labels" && value && typeof value === "object") {
+    const text = labelsToText(value as Record<string, string>);
+    return text || "（清空）";
+  }
+  return String(value);
 }
 
 function fieldLabel(key: string): string {

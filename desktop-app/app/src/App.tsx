@@ -205,6 +205,27 @@ function formatPercent(value: number | null | undefined): string {
   return `${(value * 100).toFixed(value > 0 && value < 0.01 ? 1 : 0)}%`;
 }
 
+/** 画像里的数值范围：没有范围（文本列、全空列）一律「—」，不假装有。 */
+function formatRangeBound(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  const abs = Math.abs(value);
+  const digits = abs >= 1000 ? 0 : abs >= 1 ? 3 : 4;
+  return value
+    .toFixed(digits)
+    .replace(/(\.\d*?)0+$/, "$1")
+    .replace(/\.$/, "");
+}
+
+/** 样例值的编码还原：字典里录了 1=高一，就把 1 显示成「高一」。 */
+function decodeSamples(column: ProfileColumn, dictionary?: VariableDictionary | null): string | null {
+  const labels = dictionary?.entries?.[column.name]?.value_labels;
+  if (!labels) return null;
+  const decoded = column.sample_values
+    .map((value) => labels[String(value).trim()])
+    .filter((item): item is string => Boolean(item));
+  return decoded.length > 0 ? `编码：${decoded.join("、")}` : null;
+}
+
 function providerLabel(provider: string | undefined): string {
   if (provider === "custom_model") return "自定义模型";
   if (provider === "huawei_maas") return "华为云 MaaS";
@@ -2883,24 +2904,34 @@ function ProfileTable({ profile, dictionary }: { profile: DataProfile | null; di
               <th>缺失</th>
               <th>缺失率</th>
               <th>唯一值</th>
+              <th>最小值</th>
+              <th>最大值</th>
               <th>样例值</th>
             </tr>
           </thead>
           <tbody>
-            {profile.columns.map((column) => (
-              <tr key={column.name}>
-                <td title={column.name}>{column.name}</td>
-                <td title={dictionary?.entries?.[column.name]?.description ?? ""}>
-                  {dictionary?.entries?.[column.name]?.label ?? <span className="note">待确认</span>}
-                </td>
-                <td>{column.kind ?? "未知"}</td>
-                <td>{dtypeLabel(column.dtype)}</td>
-                <td>{column.missing}</td>
-                <td>{formatPercent(column.missing_rate)}</td>
-                <td>{column.unique}</td>
-                <td title={column.sample_values.join(", ")}>{column.sample_values.join(", ")}</td>
-              </tr>
-            ))}
+            {profile.columns.map((column) => {
+              const decoded = decodeSamples(column, dictionary);
+              return (
+                <tr key={column.name}>
+                  <td title={column.name}>{column.name}</td>
+                  <td title={dictionary?.entries?.[column.name]?.description ?? ""}>
+                    {dictionary?.entries?.[column.name]?.label ?? <span className="note">待确认</span>}
+                  </td>
+                  <td>{column.kind ?? "未知"}</td>
+                  <td>{dtypeLabel(column.dtype)}</td>
+                  <td>{column.missing}</td>
+                  <td>{formatPercent(column.missing_rate)}</td>
+                  <td>{column.unique}</td>
+                  <td className="numeric-cell">{formatRangeBound(column.min)}</td>
+                  <td className="numeric-cell">{formatRangeBound(column.max)}</td>
+                  <td title={column.sample_values.join(", ")}>
+                    <span>{column.sample_values.join(", ")}</span>
+                    {decoded ? <span className="sample-decoded">{decoded}</span> : null}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

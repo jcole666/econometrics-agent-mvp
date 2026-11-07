@@ -172,3 +172,59 @@ def test_infer_variables_endpoint_still_role_based() -> None:
     body = response.json()
     assert body["dependent_variable"] == "创新指数"
     assert body["reasoning"]
+
+
+def test_confirm_persists_value_labels() -> None:
+    """编码只写 value_labels 元数据，确认后 GET 要一致，且能整体清空。"""
+    dictionary = infer(sample_columns())["dictionary"]
+    patch = {
+        "column": "城市",
+        "before": {"value_labels": {}},
+        "after": {"value_labels": {"1": "一线", "2": "二线"}},
+        "op": "update",
+    }
+
+    confirmed = client.post(
+        "/variable-dict/confirm",
+        json={
+            "dataset_id": "sample_city_panel",
+            "dataset_hash": "hash-a",
+            "patches": [patch],
+            "dictionary": dictionary,
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["dictionary"]["entries"]["城市"]["value_labels"] == {"1": "一线", "2": "二线"}
+
+    fetched = client.get("/variable-dict", params={"dataset_id": "sample_city_panel", "dataset_hash": "hash-a"})
+    assert fetched.status_code == 200
+    assert fetched.json()["entries"]["城市"]["value_labels"] == {"1": "一线", "2": "二线"}
+
+    cleared = client.post(
+        "/variable-dict/confirm",
+        json={
+            "dataset_id": "sample_city_panel",
+            "dataset_hash": "hash-a",
+            "patches": [{"column": "城市", "before": {"value_labels": {"1": "一线", "2": "二线"}}, "after": {"value_labels": {}}, "op": "update"}],
+            "dictionary": fetched.json(),
+        },
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["dictionary"]["entries"]["城市"]["value_labels"] == {}
+
+
+def test_value_labels_do_not_touch_raw_profile() -> None:
+    """编码是元数据：画像里的样例值仍应是原始值，不被替换。"""
+    dictionary = infer(sample_columns())["dictionary"]
+    client.post(
+        "/variable-dict/confirm",
+        json={
+            "dataset_id": "sample_city_panel",
+            "dataset_hash": "hash-a",
+            "patches": [{"column": "城市", "before": {}, "after": {"value_labels": {"上海": "上海市"}}, "op": "update"}],
+            "dictionary": dictionary,
+        },
+    )
+
+    columns = {item["name"]: item for item in sample_columns()}
+    assert "上海" in columns["城市"]["sample_values"]
