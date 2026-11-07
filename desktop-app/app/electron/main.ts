@@ -7,6 +7,7 @@ import {
   checkSidecarHealth,
   hasPackagedSidecar,
   lastSidecarExitCode,
+  localAccessToken,
   SIDECAR_PORT,
   startSidecar,
   stopSidecar,
@@ -20,6 +21,11 @@ let mainWindow: BrowserWindow | null = null;
 interface SaveTextPayload {
   fileName?: string;
   content?: string;
+}
+
+interface SaveImagePayload {
+  fileName?: string;
+  dataUrl?: string;
 }
 
 interface SavePdfPayload {
@@ -382,6 +388,11 @@ function guideHtml(markdown: string) {
 }
 
 function installIpcHandlers() {
+  // 渲染进程通过 preload 同步取一次本机令牌，之后所有 sidecar 请求都带上它
+  ipcMain.on("get-local-token", (event) => {
+    event.returnValue = localAccessToken();
+  });
+
   ipcMain.handle("save-text-file", async (_event, payload: SaveTextPayload = {}) => {
     const content = payload.content || "";
     if (!content.trim()) {
@@ -402,6 +413,28 @@ function installIpcHandlers() {
     }
 
     await fs.writeFile(result.filePath, content, "utf8");
+    return { ok: true, filePath: result.filePath };
+  });
+
+  ipcMain.handle("save-image-file", async (_event, payload: SaveImagePayload = {}) => {
+    const dataUrl = payload.dataUrl || "";
+    const marker = "base64,";
+    const index = dataUrl.indexOf(marker);
+    if (index < 0) {
+      return { ok: false, canceled: false, error: "图片数据无效。" };
+    }
+
+    const result = await dialog.showSaveDialog({
+      title: "导出图表",
+      defaultPath: path.join(app.getPath("pictures"), fileName(payload.fileName, "图表.png")),
+      filters: [{ name: "PNG 图片", extensions: ["png"] }]
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { ok: false, canceled: true };
+    }
+
+    await fs.writeFile(result.filePath, Buffer.from(dataUrl.slice(index + marker.length), "base64"));
     return { ok: true, filePath: result.filePath };
   });
 

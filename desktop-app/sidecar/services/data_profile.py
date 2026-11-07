@@ -11,6 +11,7 @@ def profile_dataframe(df: pd.DataFrame) -> dict:
     for name in df.columns:
         series = df[name]
         missing = int(series.isna().sum())
+        numeric = pd.to_numeric(series, errors="coerce") if pd_types.is_numeric_dtype(series) else None
         columns.append(
             {
                 "name": str(name),
@@ -20,6 +21,10 @@ def profile_dataframe(df: pd.DataFrame) -> dict:
                 "unique": int(series.nunique(dropna=True)),
                 "kind": _column_kind(series),
                 "sample_values": series.dropna().astype(str).head(3).tolist(),
+                # 变量字典推断需要取值范围：数值列给 min/max 与非空计数。
+                "min": _safe_float(numeric.min()) if numeric is not None else None,
+                "max": _safe_float(numeric.max()) if numeric is not None else None,
+                "non_null": int(len(df) - missing),
             }
         )
 
@@ -29,6 +34,16 @@ def profile_dataframe(df: pd.DataFrame) -> dict:
         "columns": columns,
         "diagnostics": build_diagnostics(df),
     }
+
+
+def _safe_float(value: object) -> float | None:
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    return round(number, 6)
 
 
 def build_diagnostics(df: pd.DataFrame) -> dict:

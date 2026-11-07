@@ -6,7 +6,9 @@
 
 Windows 用户直接下载最新版：
 
-[Econometrics-Agent-Workbench-0.6.2-portable.exe](https://github.com/jcole666/econometrics-agent-mvp/releases/download/v0.6.2/Econometrics-Agent-Workbench-0.6.2-portable.exe)
+[前往 Releases 下载最新版](https://github.com/jcole666/econometrics-agent-mvp/releases/latest)
+
+产物文件名形如 `Econometrics-Agent-Workbench-<版本号>-portable.exe`，免安装，放在任意目录即可。
 
 下载后双击即可使用。第一次启动会自动拉起本地分析服务，可能需要等待十几秒。
 
@@ -14,37 +16,67 @@ Windows 用户直接下载最新版：
 
 旧版本仍保留在 [GitHub Releases](https://github.com/jcole666/econometrics-agent-mvp/releases) 页面，可以按版本号下载。
 
-校验值：
+校验值（v0.7.0）：
 
 ```text
-SHA256 9893534ECC6918AE5BB4783F10D448CF039F6212057B75225F78F9F6E3F34B8C
+SHA256 D116B3EC3BA340DA9DAF42C691B94C46E81006C7233BC2BEF8E6D15492CBE5CF
 ```
 
-## 直接打开
+下载后可用 `Get-FileHash .\<exe> -Algorithm SHA256` 比对；每个 Release 同时附同名 `.sha256` 文件。
 
-在项目根目录双击：
+历史版本 v0.6.2 的校验值为 `9893534ECC6918AE5BB4783F10D448CF039F6212057B75225F78F9F6E3F34B8C`。
 
-```text
-小计.exe
+## 从源码运行
+
+仓库里**不含** `小计.exe`（打包产物，已被 `.gitignore` 忽略），clone 下来后请二选一。
+
+**方式一：下载发布版**（推荐，只需双击）—— 见上一节，不需要 Python 和 Node。
+
+**方式二：源码运行**（需要 Python 3.10+ 与 Node.js 20.19+，Vite 7 的最低要求）：
+
+```powershell
+# 1. 仓库根目录建虚拟环境并安装后端依赖
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r desktop-app\sidecar\requirements.txt
+
+# 2. 安装前端依赖
+cd desktop-app\app
+npm install
 ```
 
-如果根目录还没有这个文件，先运行一次打包脚本：
+然后开两个终端，都停在 `desktop-app\app`：
+
+```powershell
+npm run dev:renderer   # 终端 A：Vite 开发服务器，127.0.0.1:5173
+npm run dev:electron   # 终端 B：Electron 主进程，会自动拉起 sidecar（127.0.0.1:8768）
+```
+
+只想起后端排查接口问题：
+
+```powershell
+cd desktop-app
+..\.venv\Scripts\python -m sidecar.serve --port 8768
+```
+
+## 自行打包
 
 ```powershell
 .\package-windows.ps1
 ```
 
-脚本会生成正式文件，并自动同步一份到根目录：
+脚本会先构建前端与 sidecar，再用 electron-builder 打出免安装 exe，并同步一份到仓库根目录：
 
 ```text
 小计.exe
 ```
 
-原始打包产物仍保留在：
+原始产物保留在：
 
 ```text
-desktop-app\app\release\Econometrics-Agent-Workbench-0.6.2-portable.exe
+desktop-app\app\release\Econometrics-Agent-Workbench-<版本号>-portable.exe
 ```
+
+打包会读取你本机的 `.env`（仓库根或 `%APPDATA%\EconometricsAgent\`），但 `.env` 不会被打进 exe。
 
 ## 快速体验
 
@@ -99,4 +131,36 @@ npm --prefix app run typecheck
 
 ## 配置
 
-不要把 API Key 写进代码。需要接入 MaaS 时，用 `.env`、环境变量，或本地未跟踪的 `desktop-app/config.toml`。
+不要把 API Key 写进代码或提交到仓库。服务端按以下顺序查找 `.env`，**第一个存在的生效**：
+
+1. 环境变量 `XIAOJI_CONFIG_DIR` 指向的目录（便于测试与运维覆盖）
+2. `%APPDATA%\EconometricsAgent\.env`（打包版用户可写目录）
+3. 仓库根目录 `.env`（仅源码运行）
+
+打包版不会从 exe 内部读取任何配置文件，所以升级版本不会覆盖你已经填好的 Key。
+
+可用键位见 `.env.example`：`MAAS_API_KEY`、`MAAS_BASE_URL`、`MAAS_MODEL`、`MAAS_ENABLED`、`MAAS_TIMEOUT`、`MAAS_ALLOWED_HOSTS`。
+
+`MAAS_BASE_URL` 只允许 HTTPS，且域名必须命中白名单（本机回环地址可用 HTTP，便于接本地推理服务）；需要新增域名时用 `MAAS_ALLOWED_HOSTS` 逗号分隔追加。启动后可访问 `http://127.0.0.1:8768/health` 查看 `maas.configured` 与 `maas.config_file`，确认配置是否被读到。
+
+## 本机安全边界
+
+- 分析服务只监听 `127.0.0.1`，不对局域网开放。
+- 桌面应用启动时生成一次随机令牌，通过环境变量交给服务；前端所有请求都带 `X-Xiaoji-Token`。本机其他进程没有这个令牌就调不动接口，`/health` 保持公开供健康检查。
+- 模型请求地址（`base_url`）只允许 HTTPS 且必须命中域名白名单，避免服务端带着你的 API Key 请求任意主机。
+
+## 测试与持续集成
+
+```bash
+cd desktop-app
+../.venv/Scripts/python -m pytest sidecar/tests -q     # 49 passed
+
+cd app
+npm run typecheck
+```
+
+推送时 GitHub Actions 会跑同一套检查，配置见 `.github/workflows/ci.yml`。
+
+## 许可
+
+MIT，见 [LICENSE](LICENSE)。

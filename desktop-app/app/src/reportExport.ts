@@ -57,3 +57,23 @@ export async function saveReportPdf(report: string, question: string): Promise<s
     return error instanceof Error ? error.message : "PDF 导出失败。";
   }
 }
+
+/** 导出图表 PNG：桌面端走系统保存对话框，浏览器里退化为直接下载。 */
+export async function saveChartImage(fileName: string, dataUrl: string): Promise<string> {
+  try {
+    if (window.workbench?.saveImageFile) {
+      const result = await window.workbench.saveImageFile({ fileName, dataUrl });
+      return saveResultMessage(result, "图片");
+    }
+
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return "图片已导出。";
+  } catch (error) {
+    return error instanceof Error ? error.message : "图片导出失败。";
+  }
+}

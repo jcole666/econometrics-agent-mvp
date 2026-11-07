@@ -2,25 +2,39 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib import error, request as urlrequest
+from urllib.parse import urlparse
 
 from sidecar.schemas import LLMConfig, ModelRequest
 from sidecar.services.code_generator import generate_code
+from sidecar.services.config_paths import read_env_file, resolve_env_file
 
 
-def _project_root() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-    return Path(__file__).resolve().parents[2]
+def _env_file() -> Path | None:
+    return resolve_env_file()
 
 
 DEFAULT_BASE_URL = "https://api.modelarts-maas.com/openai/v1"
 DEFAULT_MODEL = "deepseek-v4-pro-IckBJP"
 SUPPORTED_MODELS = {"OLS", "Logit", "Panel Fixed Effects", "DID", "IV-2SLS", "RDD"}
+
+# 自定义模型地址白名单：服务端会带着用户的 API Key 请求这个地址，
+# 因此只允许已知的托管服务域名，避免前端把 Key 转发到任意主机。
+DEFAULT_ALLOWED_HOSTS = frozenset(
+    {
+        "api.modelarts-maas.com",
+        "api.openai.com",
+        "api.deepseek.com",
+        "dashscope.aliyuncs.com",
+        "api.moonshot.cn",
+        "open.bigmodel.cn",
+        "ark.cn-beijing.volces.com",
+    }
+)
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class MaasUnavailable(RuntimeError):
@@ -52,13 +66,17 @@ def get_maas_status() -> dict[str, Any]:
     _load_local_env()
     api_key = _get_api_key()
     enabled = not _is_disabled(os.getenv("MAAS_ENABLED", "auto"))
+    base_url = os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+    env_file = getattr(_load_local_env, "_source", None)
     return {
         "provider": "huawei_maas",
         "enabled": enabled,
         "configured": enabled and bool(api_key),
         "api_key_present": bool(api_key),
-        "base_url": os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
+        "base_url": base_url,
+        "base_url_allowed": is_base_url_allowed(base_url),
         "model": os.getenv("MAAS_MODEL", DEFAULT_MODEL),
+        "config_file": str(env_file) if env_file is not None else None,
     }
 
 
@@ -101,7 +119,7 @@ def _get_config(llm_config: LLMConfig | None = None) -> MaasConfig:
 
     return MaasConfig(
         api_key=api_key,
-        base_url=os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
+        base_url=_validate_base_url(os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL)),
         model=os.getenv("MAAS_MODEL", DEFAULT_MODEL),
         timeout=_get_timeout(),
     )
@@ -111,17 +129,60 @@ def _has_custom_config(llm_config: LLMConfig | None) -> bool:
     return bool(llm_config and any([llm_config.api_key, llm_config.base_url, llm_config.model]))
 
 
+def _allowed_hosts() -> set[str]:
+    hosts = set(DEFAULT_ALLOWED_HOSTS)
+    for item in os.getenv("MAAS_ALLOWED_HOSTS", "").split(","):
+        candidate = item.strip().lower()
+        if candidate:
+            hosts.add(candidate)
+    return hosts
+
+
+def is_base_url_allowed(base_url: str) -> bool:
+    try:
+        _validate_base_url(base_url)
+    except MaasUnavailable:
+        return False
+    return True
+
+
+def _validate_base_url(base_url: str | None) -> str:
+    """校验模型服务地址，返回去掉尾部斜杠的地址。
+
+    规则：仅允许 https；本机回环允许 http（便于接本地推理服务）；
+    非回环域名必须在白名单内，且地址不得携带账号密码。
+    校验失败抛 MaasUnavailable，由上层降级到本地规则。
+    """
+    raw = (base_url or "").strip()
+    if not raw:
+        raise MaasUnavailable("模型服务地址为空，当前使用本地规则。")
+
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        raise MaasUnavailable("模型服务地址必须以 http:// 或 https:// 开头，当前使用本地规则。")
+    if parsed.username or parsed.password:
+        raise MaasUnavailable("模型服务地址不允许携带账号密码，当前使用本地规则。")
+
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise MaasUnavailable("模型服务地址缺少域名，当前使用本地规则。")
+    if parsed.scheme == "http" and host not in LOOPBACK_HOSTS:
+        raise MaasUnavailable("模型服务地址必须使用 HTTPS（本机回环除外），当前使用本地规则。")
+    if host not in LOOPBACK_HOSTS and host not in _allowed_hosts():
+        raise MaasUnavailable(f"模型服务域名 {host} 不在白名单内，当前使用本地规则。")
+
+    return raw.rstrip("/")
+
+
 def _get_custom_config(llm_config: LLMConfig | None) -> MaasConfig:
     assert llm_config is not None
 
-    base_url = (llm_config.base_url or os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL)).strip().rstrip("/")
+    base_url = _validate_base_url(llm_config.base_url or os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL))
     api_key = (llm_config.api_key or _get_api_key()).strip()
     model = (llm_config.model or os.getenv("MAAS_MODEL", DEFAULT_MODEL)).strip()
 
     if not api_key:
         raise MaasUnavailable("自定义模型缺少 API Key，当前使用本地规则。")
-    if not base_url:
-        raise MaasUnavailable("自定义模型缺少 API 地址，当前使用本地规则。")
     if not model:
         raise MaasUnavailable("自定义模型缺少模型名称，当前使用本地规则。")
 
@@ -132,18 +193,13 @@ def _load_local_env() -> None:
     if getattr(_load_local_env, "_done", False):
         return
 
-    env_path = _project_root() / ".env"
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in stripped:
-                continue
-            key, value = stripped.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if key and key not in os.environ:
+    env_path = _env_file()
+    if env_path is not None:
+        for key, value in read_env_file(env_path).items():
+            if key not in os.environ:
                 os.environ[key] = value
 
+    _load_local_env._source = env_path
     _load_local_env._done = True
 
 
@@ -236,6 +292,11 @@ def _parse_json_content(content: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise MaasUnavailable("MaaS JSON 顶层不是对象，当前使用本地规则。")
     return value
+
+
+def parse_json_content(content: str) -> dict[str, Any]:
+    """公开版本：供变量字典、模型解读等模块复用同一套 JSON 提取逻辑。"""
+    return _parse_json_content(content)
 
 
 def _normalize_recommendation(raw: dict[str, Any], fallback: dict[str, Any], request: ModelRequest) -> MaasRecommendation:

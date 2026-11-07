@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -6,6 +7,18 @@ import path from "node:path";
 import { app } from "electron";
 
 export const SIDECAR_PORT = 8768;
+
+export const LOCAL_TOKEN_ENV = "XIAOJI_LOCAL_TOKEN";
+
+/**
+ * 每次启动生成一个随机令牌，注入 sidecar 环境变量，并交给渲染进程带在请求头里。
+ * 这样本机其他进程即使能访问 127.0.0.1:8768，也调不动这些接口（例如借接口把 Key 转发出去）。
+ */
+const LOCAL_TOKEN = crypto.randomUUID();
+
+export function localAccessToken() {
+  return LOCAL_TOKEN;
+}
 
 let sidecar: ChildProcess | null = null;
 let exitCode: number | null = null;
@@ -20,6 +33,15 @@ function pythonPath(root: string) {
     path.join(root, "..", ".venv", "Scripts", "python.exe")
   ];
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? "python";
+}
+
+/**
+ * 源码模式下 sidecar 包位于 desktop-app/，必须在该目录启动，
+ * 否则 `python -m sidecar.serve` 会报 No module named 'sidecar'。
+ */
+function sidecarWorkdir(root: string) {
+  const desktopApp = path.join(root, "desktop-app");
+  return fs.existsSync(path.join(desktopApp, "sidecar")) ? desktopApp : root;
 }
 
 function packagedSidecarPath() {
@@ -40,7 +62,7 @@ export function startSidecar() {
   const usePackagedSidecar = hasPackagedSidecar();
   const command = usePackagedSidecar ? packagedSidecarPath() : pythonPath(root);
   const args = usePackagedSidecar ? ["--port", String(SIDECAR_PORT)] : ["-m", "sidecar.serve", "--port", String(SIDECAR_PORT)];
-  const cwd = usePackagedSidecar ? path.dirname(command) : root;
+  const cwd = usePackagedSidecar ? path.dirname(command) : sidecarWorkdir(root);
 
   if ((app.isPackaged || process.env.NODE_ENV === "production") && !fs.existsSync(command)) {
     throw new Error(`找不到本地分析服务程序：${command}`);
@@ -48,7 +70,7 @@ export function startSidecar() {
 
   sidecar = spawn(command, args, {
     cwd,
-    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    env: { ...process.env, PYTHONUNBUFFERED: "1", [LOCAL_TOKEN_ENV]: LOCAL_TOKEN },
     stdio: app.isPackaged ? "ignore" : "inherit",
     windowsHide: true
   });

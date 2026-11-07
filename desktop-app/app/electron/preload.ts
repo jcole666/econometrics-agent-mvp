@@ -1,7 +1,16 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+function readLocalToken(): string {
+  try {
+    return (ipcRenderer.sendSync("get-local-token") as string) || "";
+  } catch {
+    return "";
+  }
+}
+
 contextBridge.exposeInMainWorld("workbench", {
   platform: process.platform,
+  localToken: readLocalToken(),
   onOpenModelSettings: (callback: () => void) => {
     const listener = () => callback();
     ipcRenderer.on("open-model-settings", listener);
@@ -17,5 +26,8 @@ contextBridge.exposeInMainWorld("workbench", {
   },
   saveReportPdf: (payload: { fileName: string; title: string; markdown: string }) => {
     return ipcRenderer.invoke("save-report-pdf", payload);
+  },
+  saveImageFile: (payload: { fileName: string; dataUrl: string }) => {
+    return ipcRenderer.invoke("save-image-file", payload);
   }
 });

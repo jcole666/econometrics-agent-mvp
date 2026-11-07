@@ -2,6 +2,7 @@ import {
   Activity,
   ArrowLeft,
   ArrowRight,
+  ArrowRightLeft,
   BookOpen,
   ChevronDown,
   Cpu,
@@ -10,6 +11,7 @@ import {
   FileText,
   FileUp,
   HelpCircle,
+  History,
   MessageSquare,
   Minimize2,
   Play,
@@ -29,14 +31,23 @@ import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffec
 
 import {
   chat,
+  compareModelRuns,
+  confirmVariableDict,
+  createModelRun,
+  explainModel,
   generateReport,
   getHealth,
+  getVariableDict,
+  inferVariableDict,
   inferVariables,
+  listModelRuns,
   loadSampleFile,
   loadSampleProfile,
+  previewVariableDictPatch,
   profileData,
   recommendModel,
-  runModel
+  runModel,
+  updateModelRunExplanation
 } from "./api";
 import {
   chatPreview,
@@ -59,6 +70,19 @@ import {
 import { ChatMessageBody, MarkdownBody, ThinkingMessage } from "./markdown";
 import { saveReportMarkdown, saveReportPdf } from "./reportExport";
 import { dtypeLabel } from "./dtypeLabel";
+import { ExplanationCard } from "./components/ExplanationCard";
+import { ModelRunCompare } from "./components/ModelRunCompare";
+import { ModelRunHistory } from "./components/ModelRunHistory";
+import { RelationshipCharts } from "./components/RelationshipCharts";
+import { RelationshipNetwork } from "./components/RelationshipNetwork";
+import { VariableDictionaryPanel } from "./components/VariableDictionaryPanel";
+import {
+  datasetIdentity,
+  readCachedDictionary,
+  writeCachedDictionary,
+  type DatasetIdentity
+} from "./projectStore";
+import { displayName } from "./variableDictionary";
 import {
   buildSampleRequest,
   isSampleProfile,
@@ -93,10 +117,18 @@ import type {
   CoefficientResult,
   DataProfile,
   InferVariablesResponse,
+  ModelExplanation,
   ModelRecommendation,
   ModelRequest,
+  ModelRunCompareResponse,
+  ModelRunConfig,
+  ModelRunRecord,
+  ProfileColumn,
   RelationshipHint,
-  RunModelResponse
+  RunModelResponse,
+  VariableDictPatchItem,
+  VariableDictPatchPreviewResponse,
+  VariableDictionary
 } from "./types";
 
 const QUESTION_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.question}`;
@@ -104,7 +136,7 @@ const COLUMNS_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.columns}`;
 const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.dependentVariable}`;
 const INDEPENDENT_VARIABLES_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.independentVariables}`;
 const CHAT_PLACEHOLDER = "例如：为什么推荐这个模型？";
-type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample";
+type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample" | "dictionary";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
 
@@ -152,9 +184,10 @@ const MODEL_OPTIONS = [
   { value: "IV-2SLS", label: "IV-2SLS 工具变量" }
 ];
 
+/** 字段列表切分：中文逗号、顿号、分号都当分隔符，避免用户打全角逗号就「列不存在」。 */
 function splitList(value: string): string[] {
   return value
-    .split(",")
+    .split(/[,，、;；]+/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -171,6 +204,31 @@ function formatPercent(value: number | null | undefined): string {
     return "0%";
   }
   return `${(value * 100).toFixed(value > 0 && value < 0.01 ? 1 : 0)}%`;
+}
+
+/** 画像里的数值范围：没有范围（文本列、全空列）一律「—」，不假装有。 */
+function formatRangeBound(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  const abs = Math.abs(value);
+  const digits = abs >= 1000 ? 0 : abs >= 1 ? 3 : 4;
+  return value
+    .toFixed(digits)
+    .replace(/(\.\d*?)0+$/, "$1")
+    .replace(/\.$/, "");
+}
+
+/** 样例值的编码还原：字典里录了 1=高一，就把 1 显示成「高一」（去重，样例值常有重复）。 */
+function decodeSamples(column: ProfileColumn, dictionary?: VariableDictionary | null): string | null {
+  const labels = dictionary?.entries?.[column.name]?.value_labels;
+  if (!labels) return null;
+  const decoded = Array.from(
+    new Set(
+      column.sample_values
+        .map((value) => labels[String(value).trim()])
+        .filter((item): item is string => Boolean(item))
+    )
+  );
+  return decoded.length > 0 ? `编码：${decoded.join("、")}` : null;
 }
 
 function providerLabel(provider: string | undefined): string {
@@ -596,6 +654,21 @@ export default function App() {
   const [modelType, setModelType] = useState("OLS");
   const [runResult, setRunResult] = useState<RunModelResponse | null>(null);
   const [runNotice, setRunNotice] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<DatasetIdentity | null>(null);
+  // 文件也用 ref 留一份：示例场景在同一段异步流程里刚设好文件就要算 hash / 存版本，
+  // 此时 state 还是旧值，读 ref 才拿得到当前文件。
+  const fileRef = useRef<File | null>(null);
+  const [dictionary, setDictionary] = useState<VariableDictionary | null>(null);
+  const [dictionaryNotice, setDictionaryNotice] = useState<string | null>(null);
+  const [explanation, setExplanation] = useState<ModelExplanation | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [runs, setRuns] = useState<ModelRunRecord[]>([]);
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
+  const [viewingVersionId, setViewingVersionId] = useState<string | null>(null);
+  const [compareIds, setCompareIds] = useState<{ left: string; right: string } | null>(null);
+  const [comparison, setComparison] = useState<ModelRunCompareResponse | null>(null);
+  const [compareBusy, setCompareBusy] = useState(false);
+  const [runSaveNotice, setRunSaveNotice] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatSearch, setChatSearch] = useState("");
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
@@ -973,6 +1046,9 @@ export default function App() {
 
   function resetAnalysisForNewFile() {
     setProfile(null);
+    setIdentity(null);
+    setDictionary(null);
+    setDictionaryNotice(null);
     setColumnsInput("");
     setDependentVariable("");
     setIndependentVariables("");
@@ -987,6 +1063,13 @@ export default function App() {
     setModelType("OLS");
     setRunResult(null);
     setRunNotice(null);
+    setExplanation(null);
+    setRuns([]);
+    setActiveVersionId(null);
+    setViewingVersionId(null);
+    setCompareIds(null);
+    setComparison(null);
+    setRunSaveNotice(null);
     setReport("");
     setSampleStage("idle");
     setActiveStep(1);
@@ -995,6 +1078,7 @@ export default function App() {
   }
 
   function setSelectedFile(next: File | null) {
+    fileRef.current = next;
     setFile(next);
     resetAnalysisForNewFile();
   }
@@ -1109,6 +1193,7 @@ export default function App() {
       setColumnsInput(next.columns.map((column) => column.name).join(", "));
       setActiveStep(1);
       setStatus("字段画像已生成。");
+      void refreshDatasetContext(file);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "字段画像生成失败。");
     } finally {
@@ -1117,8 +1202,10 @@ export default function App() {
   }
 
   function applySampleState(sampleFile: File, sampleProfile: DataProfile) {
+    fileRef.current = sampleFile;
     setFile(sampleFile);
     setProfile(sampleProfile);
+    void refreshDatasetContext(sampleFile);
     setQuestion(SAMPLE_SCENARIO.question);
     setColumnsInput(sampleProfile.columns.map((column) => column.name).join(", "));
     setDependentVariable(SAMPLE_SCENARIO.dependentVariable);
@@ -1134,8 +1221,35 @@ export default function App() {
     setRecommendationNotice(null);
     setRunResult(null);
     setRunNotice(null);
+    setExplanation(null);
     setReport("");
     setSampleStage("data");
+  }
+
+  /**
+   * 示例演示专用：先按规则把变量字典推断出来，让画像、关系图、结果表一路都显示中文标签。
+   * 失败不阻断演示，只是回到「没有字典」的原始列名状态。
+   */
+  async function prepareSampleDictionary(targetProfile: DataProfile, targetIdentity: DatasetIdentity) {
+    try {
+      const response = await inferVariableDict({
+        research_question: SAMPLE_SCENARIO.question,
+        dataset_id: targetIdentity.dataset_id,
+        dataset_hash: targetIdentity.dataset_hash,
+        columns: targetProfile.columns,
+        existing: null,
+        llm_config: llmConfig
+      });
+      setDictionary(response.dictionary);
+      writeCachedDictionary(response.dictionary);
+      setDictionaryNotice(
+        response.maas_error
+          ? `示例字典已按本地规则生成：${response.maas_error}`
+          : "示例变量字典已生成，可在「变量字典」里逐列核对。"
+      );
+    } catch {
+      setDictionary(null);
+    }
   }
 
   async function loadSampleScenario() {
@@ -1145,6 +1259,9 @@ export default function App() {
     try {
       const [sampleFile, sampleProfile] = await Promise.all([loadSampleFile(), loadSampleProfile()]);
       applySampleState(sampleFile, sampleProfile);
+
+      const sampleIdentity = await datasetIdentity(sampleFile);
+      await prepareSampleDictionary(sampleProfile, sampleIdentity);
 
       const request = buildSampleRequest(sampleProfile);
 
@@ -1163,6 +1280,30 @@ export default function App() {
       if (!nextRunResult.success) {
         throw new Error(nextRunResult.error ?? "模型运行失败。");
       }
+      const sampleRecord = await saveRun({
+        researchQuestion: SAMPLE_SCENARIO.question,
+        model: nextModel,
+        config: {
+          dependent_variable: SAMPLE_SCENARIO.dependentVariable,
+          independent_variables: splitList(SAMPLE_SCENARIO.independentVariables),
+          entity_column: SAMPLE_SCENARIO.entityColumn,
+          time_column: SAMPLE_SCENARIO.timeColumn,
+          treatment_column: null,
+          running_variable: null,
+          instrument_variable: null
+        },
+        result: nextRunResult,
+        identity: sampleIdentity
+      });
+      void requestExplanation(
+        nextRunResult,
+        SAMPLE_SCENARIO.question,
+        {
+          dependent: SAMPLE_SCENARIO.dependentVariable,
+          independent: splitList(SAMPLE_SCENARIO.independentVariables)
+        },
+        sampleRecord?.version_id ?? null
+      );
 
       const nextPath = buildResearchPath({
         profile: sampleProfile,
@@ -1217,6 +1358,210 @@ export default function App() {
     }
   }
 
+  /**
+   * 换了文件就重算 dataset_id / dataset_hash，并尝试恢复已保存的变量字典。
+   * 字典服务端是权威，localStorage 只是首屏缓存。
+   */
+  async function refreshDatasetContext(nextFile: File | null) {
+    if (!nextFile) {
+      setIdentity(null);
+      setDictionary(null);
+      setDictionaryNotice(null);
+      return;
+    }
+    try {
+      const nextIdentity = await datasetIdentity(nextFile);
+      setIdentity(nextIdentity);
+      void loadRuns(nextIdentity.dataset_id);
+      const cached = readCachedDictionary(nextIdentity.dataset_id, nextIdentity.dataset_hash);
+      setDictionary(cached);
+      setDictionaryNotice(null);
+      const stored = await getVariableDict(nextIdentity.dataset_id, nextIdentity.dataset_hash);
+      if (stored) {
+        setDictionary(stored);
+        writeCachedDictionary(stored);
+      }
+    } catch (error) {
+      setIdentity(null);
+      setDictionary(null);
+      setDictionaryNotice(error instanceof Error ? `变量字典读取失败：${error.message}` : "变量字典读取失败。");
+    }
+  }
+
+  async function ensureIdentity(): Promise<DatasetIdentity | null> {
+    if (identity) return identity;
+    const currentFile = fileRef.current ?? file;
+    if (!currentFile) return null;
+    const next = await datasetIdentity(currentFile);
+    setIdentity(next);
+    return next;
+  }
+
+  async function inferDictionary() {
+    if (!profile) {
+      setDictionaryNotice("请先生成字段画像，再推断变量含义。");
+      return;
+    }
+    const current = await ensureIdentity();
+    if (!current) {
+      setDictionaryNotice("请先选择数据文件。");
+      return;
+    }
+
+    setBusy("dictionary");
+    setDictionaryNotice(null);
+    try {
+      const response = await inferVariableDict({
+        research_question: question.trim(),
+        dataset_id: current.dataset_id,
+        dataset_hash: current.dataset_hash,
+        columns: profile.columns,
+        existing: dictionary,
+        llm_config: llmConfig
+      });
+      setDictionary(response.dictionary);
+      writeCachedDictionary(response.dictionary);
+      setDictionaryNotice(
+        response.maas_error
+          ? `已用本地规则生成：${response.maas_error}`
+          : `变量字典已生成（${response.provider === "rules" ? "本地规则" : "模型"}），请逐列核对后点「保存并确认」。`
+      );
+      setStatus("变量字典已生成。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "变量字典生成失败。";
+      setDictionaryNotice(message);
+      setStatus(message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function previewDictionary(message: string): Promise<VariableDictPatchPreviewResponse | null> {
+    if (!dictionary) return null;
+    try {
+      const response = await previewVariableDictPatch(message, dictionary, llmConfig);
+      if (response.maas_error) {
+        setDictionaryNotice(`仅用本地规则解析：${response.maas_error}`);
+      }
+      return response;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "解析修改失败。";
+      setDictionaryNotice(text);
+      return null;
+    }
+  }
+
+  async function confirmDictionary(patches: VariableDictPatchItem[]): Promise<boolean> {
+    if (!dictionary) return false;
+    const current = await ensureIdentity();
+    if (!current) return false;
+
+    setBusy("dictionary");
+    setDictionaryNotice(null);
+    try {
+      const response = await confirmVariableDict({
+        dataset_id: current.dataset_id,
+        dataset_hash: current.dataset_hash,
+        patches,
+        dictionary
+      });
+      setDictionary(response.dictionary);
+      writeCachedDictionary(response.dictionary);
+      setStatus("变量字典已更新并保存。");
+      return true;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "变量字典保存失败。";
+      setDictionaryNotice(text);
+      setStatus(text);
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function loadRuns(datasetId: string) {
+    try {
+      const list = await listModelRuns(datasetId);
+      setRuns(list);
+    } catch {
+      setRuns([]);
+    }
+  }
+
+  /** 每次成功运行新建一个版本，绝不覆盖旧结果。 */
+  async function saveRun(snapshot: {
+    researchQuestion: string;
+    model: string;
+    config: ModelRunConfig;
+    result: RunModelResponse;
+    identity: DatasetIdentity;
+  }): Promise<ModelRunRecord | null> {
+    try {
+      const record = await createModelRun({
+        parent_id: activeVersionId,
+        research_question: snapshot.researchQuestion,
+        dataset_id: snapshot.identity.dataset_id,
+        dataset_hash: snapshot.identity.dataset_hash,
+        variable_dictionary_snapshot: dictionary,
+        model: snapshot.model,
+        config: snapshot.config,
+        result: snapshot.result,
+        diagnostics: profile
+          ? { rows: profile.rows, columns_count: profile.columns_count }
+          : null,
+        ai_explanation: null
+      });
+      setRuns((current) => [...current, record]);
+      setActiveVersionId(record.version_id);
+      setRunSaveNotice(`已保存为 ${record.version_id}。`);
+      return record;
+    } catch (error) {
+      setRunSaveNotice(error instanceof Error ? `版本保存失败：${error.message}` : "版本保存失败。");
+      return null;
+    }
+  }
+
+  function openVersion(record: ModelRunRecord) {
+    setViewingVersionId(record.version_id);
+    setRunResult(record.result);
+    setRunNotice(null);
+    setExplanation(record.ai_explanation);
+    setModelType(record.model);
+    setDependentVariable(record.config.dependent_variable ?? "");
+    setIndependentVariables(record.config.independent_variables.join(", "));
+    setEntityColumn(record.config.entity_column ?? "");
+    setTimeColumn(record.config.time_column ?? "");
+    setTreatmentColumn(record.config.treatment_column ?? "");
+    setRunningVariable(record.config.running_variable ?? "");
+    setInstrumentVariable(record.config.instrument_variable ?? "");
+    setStatus(`正在查看 ${record.version_id}（只读）。字典与数据仍按当前状态，不随快照回滚。`);
+  }
+
+  function continueFromVersion(record: ModelRunRecord) {
+    setActiveVersionId(record.version_id);
+    setViewingVersionId(null);
+    setStatus(`下一次运行会以 ${record.version_id} 为父版本保存。`);
+  }
+
+  async function compareVersions(leftId: string, rightId: string) {
+    const current = await ensureIdentity();
+    if (!current) {
+      setStatus("请先选择数据文件。");
+      return;
+    }
+    setCompareBusy(true);
+    try {
+      const result = await compareModelRuns(current.dataset_id, leftId, rightId);
+      setCompareIds({ left: leftId, right: rightId });
+      setComparison(result);
+      setStatus(result.comparable ? "版本对比已生成。" : `两个版本不可比：${result.incomparable_reason ?? ""}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "版本对比失败。");
+    } finally {
+      setCompareBusy(false);
+    }
+  }
+
   async function recommend() {
     const researchQuestion = requireResearchQuestion();
     if (!researchQuestion) {
@@ -1263,13 +1608,96 @@ export default function App() {
     try {
       const next = await runModel(file, buildRequest(researchQuestion), modelType);
       setRunResult(next);
+      setViewingVersionId(null);
       setStatus(next.success ? "模型运行完成。" : next.error ?? "模型运行已停止。");
+      if (next.success) {
+        const current = await ensureIdentity();
+        let versionId: string | null = null;
+        if (current) {
+          const record = await saveRun({
+            researchQuestion,
+            model: next.model_type,
+            config: {
+              dependent_variable: dependentVariable.trim(),
+              independent_variables: splitList(independentVariables),
+              entity_column: entityColumn.trim() || null,
+              time_column: timeColumn.trim() || null,
+              treatment_column: treatmentColumn.trim() || null,
+              running_variable: runningVariable.trim() || null,
+              instrument_variable: instrumentVariable.trim() || null
+            },
+            result: next,
+            identity: current
+          });
+          versionId = record?.version_id ?? null;
+        }
+        void requestExplanation(next, researchQuestion, undefined, versionId);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "模型运行失败。";
       setRunNotice(message);
       setStatus(message);
     } finally {
       setBusy(null);
+    }
+  }
+
+  /**
+   * 生成结构化解读。数字全部来自本次 RunModelResponse，模型输出由后端校验；
+   * 失败时后端仍返回 200 + fallback 文案，这里照常展示。
+   */
+  async function requestExplanation(
+    result: RunModelResponse,
+    researchQuestion: string,
+    variables?: { dependent: string; independent: string[] },
+    versionId?: string | null
+  ) {
+    if (!result.success || !result.results) return;
+    const dependent = variables?.dependent ?? dependentVariable.trim();
+    const independent = variables?.independent ?? splitList(independentVariables);
+    if (!dependent || independent.length === 0) return;
+
+    // 约定：解释变量输入框的第一项是核心 X，其余都是控制变量。
+    // 与「先看核心系数、控制变量只看符号与显著性」的教学口径一致。
+    const coreVariable = independent[0];
+    const controlColumns = independent.slice(1);
+
+    setExplainLoading(true);
+    setExplanation(null);
+    try {
+      const next = await explainModel({
+        research_question: researchQuestion,
+        model: result.model_type,
+        variables: {
+          dependent: { column: dependent, label: displayName(dependent, dictionary) },
+          independent: [{ column: coreVariable, label: displayName(coreVariable, dictionary) }],
+          controls: controlColumns.map((column) => displayName(column, dictionary))
+        },
+        model_results: result.results,
+        diagnostics: null,
+        llm_config: llmConfig
+      });
+      setExplanation(next);
+      if (versionId) {
+        const current = identity ?? (await ensureIdentity());
+        if (current) {
+          try {
+            const updated = await updateModelRunExplanation(current.dataset_id, versionId, next);
+            setRuns((list) => list.map((item) => (item.version_id === updated.version_id ? updated : item)));
+          } catch {
+            // 解读已经展示，写不进版本不阻断主流程
+          }
+        }
+      }
+      if (next.status !== "completed") {
+        setStatus(next.error ? `已生成本地基础解读：${next.error}` : "已生成本地基础解读。");
+      } else {
+        setStatus("结构化解读已生成。");
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "解读生成失败。");
+    } finally {
+      setExplainLoading(false);
     }
   }
 
@@ -1668,8 +2096,13 @@ export default function App() {
                     {profile ? (
                       <>
                         <Panel title="字段画像" icon={<TableProperties size={17} />}>
-                          <RelationshipMap hints={profile.diagnostics?.relationship_hints?.slice(0, 8) ?? []} />
-                          <ProfileTable profile={profile} />
+                          <RelationshipCharts
+                            file={file}
+                            profile={profile}
+                            dictionary={dictionary}
+                            outcome={dependentVariable.trim() || undefined}
+                          />
+                          <ProfileTable profile={profile} dictionary={dictionary} />
                         </Panel>
                       </>
                     ) : (
@@ -1710,6 +2143,9 @@ export default function App() {
                           placeholder={INDEPENDENT_VARIABLES_PLACEHOLDER}
                           onChange={(event) => setIndependentVariables(event.target.value)}
                         />
+                        <span className="note field-hint">
+                          多个 X 用英文逗号分隔；第一项当作核心解释变量，其余按控制变量解读。
+                        </span>
                         <div className="mini-grid">
                           <Input label="个体列" value={entityColumn} onChange={setEntityColumn} />
                           <Input label="时间列" value={timeColumn} onChange={setTimeColumn} />
@@ -1720,6 +2156,19 @@ export default function App() {
                         <VariableColumnReference profile={profile} />
                       </div>
                     </Panel>
+                    {profile ? (
+                      <Panel title="变量字典" icon={<Wand2 size={17} />}>
+                        <VariableDictionaryPanel
+                          columns={profile.columns}
+                          dictionary={dictionary}
+                          busy={busy === "dictionary"}
+                          notice={dictionaryNotice}
+                          onInfer={inferDictionary}
+                          onPreview={previewDictionary}
+                          onConfirm={confirmDictionary}
+                        />
+                      </Panel>
+                    ) : null}
                   </div>
                 ) : activeStep === 3 ? (
                   <div className="dynamic-stack">
@@ -1762,7 +2211,49 @@ export default function App() {
                     ) : null}
                     {runResult ? (
                       <Panel title="模型结果" icon={<Activity size={17} />}>
-                        <RunResultView result={runResult} notice={runNotice} />
+                        <RunResultView
+                          result={runResult}
+                          notice={runNotice}
+                          dictionary={dictionary}
+                          explanation={explanation}
+                          explainLoading={explainLoading}
+                          onExplain={() => requestExplanation(runResult!, question.trim(), undefined, viewingVersionId ?? activeVersionId)}
+                        />
+                      </Panel>
+                    ) : null}
+                    {viewingVersionId ? (
+                      <div className="run-viewing-banner">
+                        <span>
+                          正在查看历史版本 <strong>{viewingVersionId}</strong>（只读）。模型结果与解读来自该版本，变量字典仍按当前数据。
+                        </span>
+                        <button type="button" className="secondary" onClick={() => setViewingVersionId(null)}>
+                          退出查看
+                        </button>
+                      </div>
+                    ) : null}
+                    {runs.length > 0 || runResult ? (
+                      <Panel title="运行版本" icon={<History size={17} />}>
+                        <ModelRunHistory
+                          runs={runs}
+                          activeVersionId={activeVersionId}
+                          viewingVersionId={viewingVersionId}
+                          dictionary={dictionary}
+                          busy={compareBusy}
+                          notice={runSaveNotice}
+                          onOpen={openVersion}
+                          onContinue={continueFromVersion}
+                          onCompare={compareVersions}
+                        />
+                      </Panel>
+                    ) : null}
+                    {comparison ? (
+                      <Panel title="版本对比" icon={<ArrowRightLeft size={17} />}>
+                        <ModelRunCompare
+                          comparison={comparison}
+                          left={runs.find((item) => item.version_id === compareIds?.left) ?? null}
+                          right={runs.find((item) => item.version_id === compareIds?.right) ?? null}
+                          dictionary={dictionary}
+                        />
                       </Panel>
                     ) : null}
                   </div>
@@ -1800,7 +2291,14 @@ export default function App() {
                     </Panel>
                     {runResult ? (
                       <Panel title="模型结果" icon={<Activity size={17} />}>
-                        <RunResultView result={runResult} notice={runNotice} />
+                        <RunResultView
+                          result={runResult}
+                          notice={runNotice}
+                          dictionary={dictionary}
+                          explanation={explanation}
+                          explainLoading={explainLoading}
+                          onExplain={() => requestExplanation(runResult!, question.trim(), undefined, viewingVersionId ?? activeVersionId)}
+                        />
                       </Panel>
                     ) : null}
                   </div>
@@ -2390,7 +2888,7 @@ function DataQualityBrief({
   );
 }
 
-function ProfileTable({ profile }: { profile: DataProfile | null }) {
+function ProfileTable({ profile, dictionary }: { profile: DataProfile | null; dictionary?: VariableDictionary | null }) {
   if (!profile) {
     return <div className="empty">尚未生成字段画像。</div>;
   }
@@ -2400,7 +2898,7 @@ function ProfileTable({ profile }: { profile: DataProfile | null }) {
   return (
     <div className="profile-stack">
       {diagnostics ? (
-        <DataDiagnosticsView profile={profile} />
+        <DataDiagnosticsView profile={profile} dictionary={dictionary} />
       ) : (
         <div className="metric-row">
           <span>{profile.rows} 行</span>
@@ -2413,26 +2911,40 @@ function ProfileTable({ profile }: { profile: DataProfile | null }) {
           <thead>
             <tr>
               <th>字段名</th>
+              <th>中文名</th>
               <th>类型判断</th>
               <th>原始类型</th>
               <th>缺失</th>
               <th>缺失率</th>
               <th>唯一值</th>
+              <th>最小值</th>
+              <th>最大值</th>
               <th>样例值</th>
             </tr>
           </thead>
           <tbody>
-            {profile.columns.map((column) => (
-              <tr key={column.name}>
-                <td title={column.name}>{column.name}</td>
-                <td>{column.kind ?? "未知"}</td>
-                <td>{dtypeLabel(column.dtype)}</td>
-                <td>{column.missing}</td>
-                <td>{formatPercent(column.missing_rate)}</td>
-                <td>{column.unique}</td>
-                <td title={column.sample_values.join(", ")}>{column.sample_values.join(", ")}</td>
-              </tr>
-            ))}
+            {profile.columns.map((column) => {
+              const decoded = decodeSamples(column, dictionary);
+              return (
+                <tr key={column.name}>
+                  <td title={column.name}>{column.name}</td>
+                  <td title={dictionary?.entries?.[column.name]?.description ?? ""}>
+                    {dictionary?.entries?.[column.name]?.label ?? <span className="note">待确认</span>}
+                  </td>
+                  <td>{column.kind ?? "未知"}</td>
+                  <td>{dtypeLabel(column.dtype)}</td>
+                  <td>{column.missing}</td>
+                  <td>{formatPercent(column.missing_rate)}</td>
+                  <td>{column.unique}</td>
+                  <td className="numeric-cell">{formatRangeBound(column.min)}</td>
+                  <td className="numeric-cell">{formatRangeBound(column.max)}</td>
+                  <td title={column.sample_values.join(", ")}>
+                    <span>{column.sample_values.join(", ")}</span>
+                    {decoded ? <span className="sample-decoded">{decoded}</span> : null}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -2440,7 +2952,7 @@ function ProfileTable({ profile }: { profile: DataProfile | null }) {
   );
 }
 
-function DataDiagnosticsView({ profile }: { profile: DataProfile }) {
+function DataDiagnosticsView({ profile, dictionary }: { profile: DataProfile; dictionary?: VariableDictionary | null }) {
   const diagnostics = profile.diagnostics;
   if (!diagnostics) return null;
 
@@ -2515,7 +3027,7 @@ function DataDiagnosticsView({ profile }: { profile: DataProfile }) {
         <div className="diagnostic-title">关系线索</div>
         {diagnostics.relationship_hints?.length ? (
           <>
-            <RelationshipMap hints={diagnostics.relationship_hints.slice(0, 8)} />
+            <RelationshipNetwork hints={diagnostics.relationship_hints.slice(0, 8)} dictionary={dictionary} />
             <div className="relationship-list">
               {diagnostics.relationship_hints.slice(0, 5).map((item) => (
                 <div className="relationship-item" key={`${item.left}-${item.right}`}>
@@ -2544,92 +3056,6 @@ function DataDiagnosticsView({ profile }: { profile: DataProfile }) {
       </div>
     </div>
   );
-}
-
-function RelationshipMap({ hints }: { hints: RelationshipHint[] }) {
-  const names = Array.from(new Set(hints.flatMap((item) => [item.left, item.right]))).slice(0, 6);
-  if (names.length < 2) return null;
-
-  const slots = [
-    { x: 130, y: 78, labelY: 103 },
-    { x: 62, y: 35, labelY: 18 },
-    { x: 198, y: 35, labelY: 18 },
-    { x: 62, y: 122, labelY: 147 },
-    { x: 198, y: 122, labelY: 147 },
-    { x: 130, y: 132, labelY: 154 },
-  ];
-  const positions = new Map(names.map((name, index) => [name, slots[index]]));
-  const edges = hints.filter((item) => positions.has(item.left) && positions.has(item.right));
-
-  return (
-    <div className="relationship-map" aria-label="变量关系地图">
-      <svg viewBox="0 0 260 165" role="img">
-        <title>变量关系地图</title>
-        {edges.map((item) => {
-          const left = positions.get(item.left)!;
-          const right = positions.get(item.right)!;
-          return (
-            <line
-              key={`${item.left}-${item.right}`}
-              x1={left.x}
-              y1={left.y}
-              x2={right.x}
-              y2={right.y}
-              className={item.score >= 0 ? "relationship-edge-positive" : "relationship-edge-negative"}
-              strokeWidth={Math.max(0.5, Math.min(2.8, Math.abs(item.score) * 2.4))}
-            />
-          );
-        })}
-        {names.map((name, index) => {
-          const point = positions.get(name)!;
-          const label = variableLabelParts(name);
-          return (
-            <g className={index === 0 ? "relationship-node relationship-node-main" : "relationship-node"} key={name}>
-              <title>{name}</title>
-              <circle cx={point.x} cy={point.y} r={index === 0 ? 14 : 12} />
-              <text x={point.x} y={point.labelY} textAnchor="middle">
-                {label.map((part, lineIndex) => (
-                  <tspan x={point.x} dy={lineIndex === 0 ? 0 : 9} key={`${name}-${lineIndex}`}>
-                    {part}
-                  </tspan>
-                ))}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="relationship-map-note">
-        <strong>{names[0]}</strong>
-        <span>与 {names.length - 1} 个变量形成明显连接</span>
-      </div>
-    </div>
-  );
-}
-
-function variableLabelParts(name: string): string[] {
-  const clean = name.replace(/\s+/g, "_");
-  if (clean.length <= 16) return [clean];
-
-  const parts = clean.split("_").filter(Boolean);
-  if (parts.length <= 1) return [shortVariableName(clean, 18)];
-
-  const lines: string[] = [];
-  parts.forEach((part) => {
-    const last = lines[lines.length - 1];
-    if (!last || `${last}_${part}`.length > 16) {
-      lines.push(part);
-    } else {
-      lines[lines.length - 1] = `${last}_${part}`;
-    }
-  });
-
-  return lines.slice(0, 2).map((line, index) => (
-    index === 1 && lines.length > 2 ? shortVariableName(line, 14) : shortVariableName(line, 16)
-  ));
-}
-
-function shortVariableName(name: string, maxLength = 18): string {
-  return name.length > maxLength ? `${name.slice(0, Math.max(1, maxLength - 3))}...` : name;
 }
 
 function ResearchPathView({
@@ -2801,7 +3227,21 @@ function RecommendationView({
   );
 }
 
-function RunResultView({ result, notice }: { result: RunModelResponse | null; notice: string | null }) {
+function RunResultView({
+  result,
+  notice,
+  dictionary,
+  explanation,
+  explainLoading,
+  onExplain
+}: {
+  result: RunModelResponse | null;
+  notice: string | null;
+  dictionary?: VariableDictionary | null;
+  explanation?: ModelExplanation | null;
+  explainLoading?: boolean;
+  onExplain?: () => void;
+}) {
   if (notice) {
     return <div className="empty">{notice}</div>;
   }
@@ -2825,8 +3265,11 @@ function RunResultView({ result, notice }: { result: RunModelResponse | null; no
           {warning}
         </p>
       ))}
+      {onExplain ? (
+        <ExplanationCard explanation={explanation ?? null} loading={Boolean(explainLoading)} onRegenerate={onExplain} />
+      ) : null}
       <ResultInterpretation result={result} />
-      <CoefficientTable coefficients={result.results.coefficients} />
+      <CoefficientTable coefficients={result.results.coefficients} dictionary={dictionary} />
     </div>
   );
 }
@@ -2864,7 +3307,7 @@ function ResultInterpretation({ result }: { result: RunModelResponse }) {
   );
 }
 
-function CoefficientTable({ coefficients }: { coefficients: CoefficientResult[] }) {
+function CoefficientTable({ coefficients, dictionary }: { coefficients: CoefficientResult[]; dictionary?: VariableDictionary | null }) {
   return (
     <table>
       <thead>
@@ -2879,7 +3322,11 @@ function CoefficientTable({ coefficients }: { coefficients: CoefficientResult[] 
       <tbody>
         {coefficients.map((item) => (
           <tr key={item.variable}>
-            <td>{translateVariable(item.variable)}</td>
+            <td title={item.variable}>
+              {displayName(item.variable, dictionary) !== item.variable
+                ? displayName(item.variable, dictionary)
+                : translateVariable(item.variable)}
+            </td>
             <td>{formatNumber(item.coefficient)}</td>
             <td>{formatNumber(item.std_error)}</td>
             <td>{formatNumber(item.t_statistic)}</td>
