@@ -62,6 +62,14 @@ export function ModelRunCompare({ comparison, left, right, dictionary }: Props) 
         </p>
       ) : null}
 
+      {comparison.ai_diff_summary ? (
+        <div className={`run-compare-summary ${comparison.comparable ? "" : "run-compare-summary-warn"}`}>
+          <span className="run-compare-title">差异摘要</span>
+          <p>{comparison.ai_diff_summary}</p>
+          <span className="run-compare-source">本地模板生成，数字取自下方差异表，未调用模型</span>
+        </div>
+      ) : null}
+
       <div className="run-compare-block">
         <span className="run-compare-title">配置差异</span>
         {configEntries.length === 0 ? (

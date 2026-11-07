@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
 from sidecar.api import app
 from sidecar.schemas import (
     CoefficientResult,
+    ExplainModelRequest,
     ExplanationSections,
     ModelRunResults,
 )
@@ -166,3 +169,27 @@ def test_endpoint_falls_back_when_llm_unavailable(monkeypatch: pytest.MonkeyPatc
 
     assert response.status_code == 200
     assert response.json()["status"] == "fallback"
+
+
+def test_prompt_separates_core_and_controls() -> None:
+    body = {**REQUEST_BODY, "variables": {**REQUEST_BODY["variables"], "controls": ["人力资本", "宽带接入率"]}}
+    request = ExplainModelRequest(**body)
+
+    messages = model_explainer._messages(request)
+    system = messages[0]["content"]
+    assert "核心解释变量" in system
+    assert "控制变量" in system
+
+    payload = json.loads(messages[1]["content"])
+    assert payload["variables"]["controls"] == ["人力资本", "宽带接入率"]
+    assert [item["column"] for item in payload["variables"]["independent"]] == ["数字经济发展指数"]
+
+
+def test_fallback_mentions_controls() -> None:
+    body = {**REQUEST_BODY, "variables": {**REQUEST_BODY["variables"], "controls": ["人力资本"]}}
+    explanation = model_explainer.explain_model(ExplainModelRequest(**body))
+
+    assert explanation.status == "fallback"
+    assert "同时控制了 人力资本" in explanation.sections.model_and_question
+    # 控制变量不该被当成核心变量写进结论句
+    assert "人力资本" not in explanation.sections.key_findings

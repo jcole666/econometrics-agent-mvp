@@ -214,3 +214,54 @@ def test_unknown_version_returns_404() -> None:
 def test_bad_dataset_id_returns_400() -> None:
     response = client.get("/model-runs", params={"dataset_id": "../evil"})
     assert response.status_code == 400
+
+
+def test_compare_summary_is_local_and_quotes_real_diff() -> None:
+    left = create(run_payload(independent=("数字经济发展指数",)))
+    right = create(run_payload(independent=("数字经济发展指数", "人力资本"), r2=0.6512))
+
+    body = client.post(
+        "/model-runs/compare",
+        json={"dataset_id": DATASET_ID, "left_id": left["version_id"], "right_id": right["version_id"]},
+    ).json()
+
+    summary = body["ai_diff_summary"]
+    assert summary and summary.strip()
+    assert "人力资本" in summary
+    assert "R²" in summary
+    assert "0.6512" in summary
+    # 本地模板生成，不该出现模型厂商字样
+    assert "maas" not in summary.lower()
+
+
+def test_incomparable_summary_has_no_metric_claims() -> None:
+    left = create(run_payload(model="Panel Fixed Effects"))
+    right = create(run_payload(model="OLS"))
+
+    body = client.post(
+        "/model-runs/compare",
+        json={"dataset_id": DATASET_ID, "left_id": left["version_id"], "right_id": right["version_id"]},
+    ).json()
+
+    summary = body["ai_diff_summary"]
+    assert summary and summary.strip()
+    assert "不可比" in summary
+    assert "模型类型不同" in summary
+    # 不允许出现「提升 x%」这类跨设定话术
+    assert "提升" not in summary
+    assert "%" not in summary
+    assert "R²" not in summary
+
+
+def test_compare_summary_p_value_never_zero_padded() -> None:
+    left = create(run_payload())
+    right = create(run_payload(coefficient=0.4123))
+
+    summary = client.post(
+        "/model-runs/compare",
+        json={"dataset_id": DATASET_ID, "left_id": left["version_id"], "right_id": right["version_id"]},
+    ).json()["ai_diff_summary"]
+
+    assert "p 值" in summary
+    assert "p 值 <0.001" in summary
+    assert "p 值 0.000" not in summary

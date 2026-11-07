@@ -100,7 +100,9 @@ def _messages(request: ExplainModelRequest) -> list[dict[str, str]]:
         "2) 只能引用 allowed_numbers 里的数字，允许四舍五入，不得新造数字；"
         "3) 不能说「证明了因果」「必然导致」，OLS 与面板固定效应只能描述相关关系；"
         "4) 没有做过的检验（平行趋势、安慰剂、Hausman、稳健性等）不得写「已通过」；"
-        "5) 解释统计量要用学生能懂的话，说清系数方向、显著性与样本量的含义。"
+        "5) 解释统计量要用学生能懂的话，说清系数方向、显著性与样本量的含义；"
+        "6) variables.independent 是核心解释变量，variables.controls 是控制变量："
+        "主要发现只围绕核心变量展开，控制变量最多用一句话交代是否显著、符号是否符合预期。"
     )
     return [
         {"role": "system", "content": system},
@@ -115,10 +117,12 @@ def _fallback(request: ExplainModelRequest, results_dict: dict[str, Any]) -> Mod
     dependent_name = (dependent.label or dependent.column) if dependent else "被解释变量"
     independent_names = [item.label or item.column for item in request.variables.independent]
     independent_text = "、".join(independent_names) if independent_names else "解释变量"
+    controls = [item for item in request.variables.controls if item]
+    controls_text = f"，同时控制了 {'、'.join(controls)}" if controls else ""
 
     model_and_question = (
         f"研究问题是「{request.research_question}」。"
-        f"这里用 {request.model} 估计 {dependent_name} 与 {independent_text} 的关系，"
+        f"这里用 {request.model} 估计 {dependent_name} 与 {independent_text} 的关系{controls_text}，"
         f"进入估计的观测为 {results_dict.get('sample_size')} 个。"
     )
 

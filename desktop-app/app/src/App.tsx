@@ -1652,6 +1652,11 @@ export default function App() {
     const independent = variables?.independent ?? splitList(independentVariables);
     if (!dependent || independent.length === 0) return;
 
+    // 约定：解释变量输入框的第一项是核心 X，其余都是控制变量。
+    // 与「先看核心系数、控制变量只看符号与显著性」的教学口径一致。
+    const coreVariable = independent[0];
+    const controlColumns = independent.slice(1);
+
     setExplainLoading(true);
     setExplanation(null);
     try {
@@ -1660,8 +1665,8 @@ export default function App() {
         model: result.model_type,
         variables: {
           dependent: { column: dependent, label: displayName(dependent, dictionary) },
-          independent: independent.map((column) => ({ column, label: displayName(column, dictionary) })),
-          controls: []
+          independent: [{ column: coreVariable, label: displayName(coreVariable, dictionary) }],
+          controls: controlColumns.map((column) => displayName(column, dictionary))
         },
         model_results: result.results,
         diagnostics: null,

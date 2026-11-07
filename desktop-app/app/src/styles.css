@@ -3145,3 +3145,27 @@ body.resizing-panels * {
 .vdict-input-wide {
   min-width: 132px;
 }
+
+.run-compare-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--moss);
+  border-radius: 6px;
+  background: var(--surface-3);
+  padding: 8px 10px;
+}
+.run-compare-summary-warn {
+  border-left-color: var(--gold);
+}
+.run-compare-summary p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.run-compare-source {
+  color: var(--muted);
+  font-size: 11px;
+}

@@ -221,6 +221,9 @@ def test_full_teaching_loop_end_to_end() -> None:
         abs=1e-6,
     )
     assert compare_body["explanations"]["left"]["sections"]["key_findings"]
+    # 差异摘要必须是本地生成、且提到这次新增的那个变量
+    summary = compare_body["ai_diff_summary"]
+    assert summary and "人力资本" in summary and "R²" in summary
 
     # ---------- 7. 重启恢复（新 client 走文件读取） ----------
     fresh = TestClient(app)
