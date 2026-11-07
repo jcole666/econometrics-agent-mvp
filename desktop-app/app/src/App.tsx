@@ -184,9 +184,10 @@ const MODEL_OPTIONS = [
   { value: "IV-2SLS", label: "IV-2SLS 工具变量" }
 ];
 
+/** 字段列表切分：中文逗号、顿号、分号都当分隔符，避免用户打全角逗号就「列不存在」。 */
 function splitList(value: string): string[] {
   return value
-    .split(",")
+    .split(/[,，、;；]+/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -216,13 +217,17 @@ function formatRangeBound(value: number | null | undefined): string {
     .replace(/\.$/, "");
 }
 
-/** 样例值的编码还原：字典里录了 1=高一，就把 1 显示成「高一」。 */
+/** 样例值的编码还原：字典里录了 1=高一，就把 1 显示成「高一」（去重，样例值常有重复）。 */
 function decodeSamples(column: ProfileColumn, dictionary?: VariableDictionary | null): string | null {
   const labels = dictionary?.entries?.[column.name]?.value_labels;
   if (!labels) return null;
-  const decoded = column.sample_values
-    .map((value) => labels[String(value).trim()])
-    .filter((item): item is string => Boolean(item));
+  const decoded = Array.from(
+    new Set(
+      column.sample_values
+        .map((value) => labels[String(value).trim()])
+        .filter((item): item is string => Boolean(item))
+    )
+  );
   return decoded.length > 0 ? `编码：${decoded.join("、")}` : null;
 }
 
@@ -2138,6 +2143,9 @@ export default function App() {
                           placeholder={INDEPENDENT_VARIABLES_PLACEHOLDER}
                           onChange={(event) => setIndependentVariables(event.target.value)}
                         />
+                        <span className="note field-hint">
+                          多个 X 用英文逗号分隔；第一项当作核心解释变量，其余按控制变量解读。
+                        </span>
                         <div className="mini-grid">
                           <Input label="个体列" value={entityColumn} onChange={setEntityColumn} />
                           <Input label="时间列" value={timeColumn} onChange={setTimeColumn} />

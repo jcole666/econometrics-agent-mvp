@@ -3169,3 +3169,9 @@ body.resizing-panels * {
   color: var(--muted);
   font-size: 11px;
 }
+
+.field-hint {
+  display: block;
+  margin-top: -2px;
+  line-height: 1.6;
+}
