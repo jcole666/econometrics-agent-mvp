@@ -73,7 +73,7 @@ SAMPLE_DATA_PATH = PROJECT_ROOT / "examples" / "sample_city_panel.csv"
 app = FastAPI(
     title="计量建模 Agent 工作台后端",
     description="本地 API：数据画像、变量识别、模型推荐、模型运行、问答和报告生成。",
-    version="0.1.0",
+    version="0.8.0",
     docs_url="/api-docs",
     redoc_url=None,
 )

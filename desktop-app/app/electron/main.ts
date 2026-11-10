@@ -1,4 +1,6 @@
 import fs from "node:fs/promises";
+import syncFs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions } from "electron";
@@ -15,6 +17,27 @@ import {
 } from "./sidecar";
 
 const APP_TITLE = "Econometrics Agent Workbench";
+
+/**
+ * 启动轨迹：打包版双击后如果没反应，用户看不到任何信息。
+ * 每一步同步追加到临时目录，出问题时能把文件发回来定位（正常启动也会写，体积很小）。
+ */
+const STARTUP_TRACE_PATH = path.join(os.tmpdir(), "xiaoji-startup-trace.log");
+
+function trace(step: string, extra?: unknown) {
+  try {
+    const payload = extra === undefined ? "" : ` ${JSON.stringify(extra)}`;
+    syncFs.appendFileSync(STARTUP_TRACE_PATH, `[${new Date().toISOString()}] ${step}${payload}\n`, "utf8");
+  } catch {
+    // 轨迹写不进去不能影响启动
+  }
+}
+
+trace("module loaded", {
+  resourcesPath: process.resourcesPath,
+  isPackaged: app.isPackaged,
+  argv: process.argv.slice(0, 3)
+});
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -613,6 +636,7 @@ function installAppMenu() {
 }
 
 async function showStartupError(detail: string) {
+  trace("startup error dialog", { detail });
   await dialog.showMessageBox({
     type: "error",
     title: APP_TITLE,
@@ -620,6 +644,23 @@ async function showStartupError(detail: string) {
     detail
   });
 }
+
+const SPLASH_HTML = `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>${APP_TITLE}</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #ece9df; color: #1d1d1b;
+    font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; }
+  .wrap { display: flex; height: 100%; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; }
+  h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: 0.02em; }
+  p { margin: 0; color: #6b6b66; font-size: 13px; line-height: 1.7; }
+  .hint { margin-top: 6px; color: #98988f; font-size: 12px; }
+</style></head>
+<body><div class="wrap">
+  <h1>正在启动本地分析服务</h1>
+  <p>首次启动需要十几秒，请不要关闭窗口</p>
+  <p class="hint">免安装版解压与安全软件扫描可能让首次启动更久一些</p>
+</div></body></html>`;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -629,6 +670,7 @@ function createWindow() {
     minHeight: 720,
     backgroundColor: "#ece9df",
     title: APP_TITLE,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
@@ -638,10 +680,14 @@ function createWindow() {
 
   const devUrl = process.env.VITE_DEV_SERVER_URL || "http://127.0.0.1:5173";
   if (app.isPackaged || hasPackagedSidecar() || process.env.NODE_ENV === "production") {
-    mainWindow.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
+    // 先挂启动页：sidecar 起来之前用户至少能看到「正在启动」，
+    // 而不是双击后长时间没有反应（免安装版首次解压 + 杀软扫描可能接近一分钟）。
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(SPLASH_HTML)}`);
   } else {
     mainWindow.loadURL(devUrl);
   }
+
+  mainWindow.once("ready-to-show", () => mainWindow?.show());
 
   mainWindow.webContents.on("before-input-event", (event, input) => {
     if (input.key === "Escape" && mainWindow?.isFullScreen()) {
@@ -655,9 +701,16 @@ function createWindow() {
   });
 }
 
+function loadAppIntoWindow() {
+  if (!mainWindow) return;
+  mainWindow.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
+}
+
 const singleInstanceLock = app.requestSingleInstanceLock();
+trace("singleInstanceLock", { acquired: singleInstanceLock });
 
 if (!singleInstanceLock) {
+  trace("quit: second instance");
   app.quit();
 } else {
   app.setName(APP_TITLE);
@@ -670,11 +723,14 @@ if (!singleInstanceLock) {
 
   app.whenReady().then(async () => {
     try {
+      trace("whenReady");
       installIpcHandlers();
       installAppMenu();
+      trace("menus+ipc installed");
 
       const packagedSidecar = hasPackagedSidecar();
       const alreadyRunning = await checkSidecarHealth(500);
+      trace("sidecar probe", { packagedSidecar, alreadyRunning, port: SIDECAR_PORT });
 
       if (packagedSidecar && alreadyRunning) {
         await showStartupError(`端口 ${SIDECAR_PORT} 已被占用。请关闭正在运行的其他实例后再启动。`);
@@ -682,11 +738,16 @@ if (!singleInstanceLock) {
         return;
       }
 
+      // 先把窗口和启动页挂上，再去拉 sidecar，避免用户面对长时间的「没反应」
+      createWindow();
+
       if (!alreadyRunning) {
         startSidecar();
+        trace("sidecar spawned");
       }
 
       const ready = alreadyRunning || (await waitForSidecar());
+      trace("sidecar ready", { ready, exitCode: lastSidecarExitCode() });
       if (!ready) {
         const exitCode = lastSidecarExitCode();
         const exitNote = exitCode === null ? "" : `进程退出码：${exitCode}。`;
@@ -695,7 +756,8 @@ if (!singleInstanceLock) {
         return;
       }
 
-      createWindow();
+      loadAppIntoWindow();
+      trace("app page loaded");
 
       app.on("activate", () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -703,6 +765,7 @@ if (!singleInstanceLock) {
         }
       });
     } catch (error) {
+      trace("startup failed", { message: error instanceof Error ? error.message : String(error) });
       await showStartupError(error instanceof Error ? error.message : String(error));
       app.quit();
     }
@@ -710,9 +773,13 @@ if (!singleInstanceLock) {
 }
 
 app.on("window-all-closed", () => {
+  trace("window-all-closed");
   if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on("before-quit", stopSidecar);
+app.on("before-quit", () => {
+  trace("before-quit");
+  stopSidecar();
+});
