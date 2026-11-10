@@ -50,6 +50,11 @@ import {
   updateModelRunExplanation
 } from "./api";
 import {
+  actionSummary,
+  normalizeActions,
+  type ChatAction
+} from "./chatActions";
+import {
   chatPreview,
   createChatSession,
   formatChatTime,
@@ -60,11 +65,16 @@ import {
 } from "./chatSessions";
 import {
   DEFAULT_MODEL_SETTINGS,
+  MODEL_PRESETS,
+  applyPreset,
+  detectPreset,
   loadModelSettings,
   missingModelSettings,
+  normalizeModelSettings,
   resetModelSettings as clearStoredModelSettings,
   saveModelSettings as saveStoredModelSettings,
   toLLMConfig,
+  type ModelPreset,
   type ModelSettings
 } from "./modelSettings";
 import { ChatMessageBody, MarkdownBody, ThinkingMessage } from "./markdown";
@@ -135,7 +145,8 @@ const QUESTION_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.question}`;
 const COLUMNS_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.columns}`;
 const DEPENDENT_VARIABLE_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.dependentVariable}`;
 const INDEPENDENT_VARIABLES_PLACEHOLDER = `例如：${SAMPLE_SCENARIO.independentVariables}`;
-const CHAT_PLACEHOLDER = "例如：为什么推荐这个模型？";
+const CHAT_PLACEHOLDER = "例如：把创新指数设为 Y，并推荐模型";
+const SETUP_SKIP_KEY = "econometrics-agent.setup-skipped";
 type BusyKey = "profile" | "infer" | "recommend" | "run" | "chat" | "report" | "sample" | "dictionary";
 type ResizeEdge = "left" | "right";
 type CheckpointTarget = "question" | "data" | "variables" | "recommendation" | "risk";
@@ -637,6 +648,7 @@ function dataFileType(fileName: string) {
 
 export default function App() {
   const [health, setHealth] = useState<"checking" | "online" | "offline">("checking");
+  const [bootMessage, setBootMessage] = useState<string | null>("正在连接本地分析服务…");
   const [file, setFile] = useState<File | null>(null);
   const [profile, setProfile] = useState<DataProfile | null>(null);
   const [question, setQuestion] = useState("");
@@ -684,8 +696,10 @@ export default function App() {
   const [showChat, setShowChat] = useState(false);
   const [reportAiOpen, setReportAiOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [setupMode, setSetupMode] = useState(false);
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => loadModelSettings());
   const [settingsDraft, setSettingsDraft] = useState<ModelSettings>(() => loadModelSettings());
+  const modelReady = missingModelSettings(modelSettings).length === 0;
   const [railWidths, setRailWidths] = useState<RailWidths>(() => loadRailWidths());
   const [panelHeights, setPanelHeights] = useState<PanelHeights>(() => loadPanelHeights());
   const [resizeEdge, setResizeEdge] = useState<ResizeEdge | null>(null);
@@ -846,9 +860,52 @@ export default function App() {
   }
 
   useEffect(() => {
-    getHealth()
-      .then(() => setHealth("online"))
-      .catch(() => setHealth("offline"));
+    let cancelled = false;
+    let attempts = 0;
+    let timer = 0;
+
+    const ping = () => {
+      getHealth()
+        .then(() => {
+          if (cancelled) return;
+          setHealth("online");
+          setBootMessage(null);
+          attempts = 0;
+          // 在线后仍低频巡检，避免 sidecar 中途挂掉后界面一直显示在线
+          timer = window.setTimeout(ping, 8000);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          attempts += 1;
+          setHealth(attempts > 8 ? "offline" : "checking");
+          setBootMessage(
+            attempts > 8
+              ? "本地服务未就绪，正在继续重试…若长时间如此请关掉所有小计窗口再开一次。"
+              : "正在启动本地分析服务…"
+          );
+          const delay = attempts < 6 ? 400 : attempts < 20 ? 1000 : 2000;
+          timer = window.setTimeout(ping, delay);
+        });
+    };
+
+    ping();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    return window.workbench?.onSidecarStatus?.((payload) => {
+      if (payload.ready) {
+        setHealth("online");
+        setBootMessage(null);
+        setStatus(payload.message);
+        void getHealth().then(() => setHealth("online")).catch(() => setHealth("offline"));
+      } else {
+        setBootMessage(payload.message);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -962,10 +1019,21 @@ export default function App() {
 
   useEffect(() => {
     return window.workbench?.onOpenModelSettings?.(() => {
+      setSetupMode(false);
       setSettingsDraft(loadModelSettings());
       setSettingsOpen(true);
     });
   }, []);
+
+  /** 首次进入：还没配好自己的 API 时，先弹出设置，再开始读数据。 */
+  useEffect(() => {
+    if (modelReady) return;
+    if (localStorage.getItem(SETUP_SKIP_KEY) === "1") return;
+    setSetupMode(true);
+    setSettingsDraft({ ...loadModelSettings(), enabled: true });
+    setSettingsOpen(true);
+    setStatus("第一步：填写你自己的模型 API，再开始分析。");
+  }, [modelReady]);
 
   useEffect(() => {
     return window.workbench?.onDataFileSelected?.((payload) => {
@@ -1015,15 +1083,50 @@ export default function App() {
   }
 
   function openModelSettings() {
+    setSetupMode(false);
     setSettingsDraft(modelSettings);
     setSettingsOpen(true);
   }
 
   function saveModelSettings() {
-    setModelSettings(settingsDraft);
-    saveStoredModelSettings(settingsDraft);
+    let next = normalizeModelSettings({ ...settingsDraft });
+    const credentialMissing = [
+      !next.baseUrl.trim() ? "请求地址" : "",
+      !next.model.trim() ? "模型名称" : "",
+      !next.apiKey.trim() ? "API Key" : ""
+    ].filter(Boolean);
+    if (setupMode && credentialMissing.length > 0) {
+      setStatus(`请先补全：${credentialMissing.join("、")}。`);
+      return;
+    }
+    if (setupMode || (next.baseUrl.trim() && next.model.trim() && next.apiKey.trim())) {
+      next = { ...next, enabled: true };
+    }
+    setModelSettings(next);
+    setSettingsDraft(next);
+    saveStoredModelSettings(next);
+    localStorage.removeItem(SETUP_SKIP_KEY);
+    setSetupMode(false);
     setSettingsOpen(false);
-    setStatus(settingsDraft.enabled ? "模型配置已保存。" : "已切换为本地规则。");
+    const preset = detectPreset(next);
+    const tip =
+      preset === "modelarts"
+        ? `已按华为 ModelArts 保存（模型 ${next.model}）。`
+        : preset === "deepseek"
+          ? `已按 DeepSeek 官方保存（模型 ${next.model}）。`
+          : "模型 API 已就绪。";
+    setStatus(next.enabled ? tip : "已切换为本地规则。");
+  }
+
+  function applyModelPreset(preset: ModelPreset) {
+    setSettingsDraft((current) => applyPreset(current, preset));
+  }
+
+  function skipModelSetup() {
+    localStorage.setItem(SETUP_SKIP_KEY, "1");
+    setSetupMode(false);
+    setSettingsOpen(false);
+    setStatus("已跳过模型配置。字段解释与对话会退回本地规则，可随时在右上角补全 API。");
   }
 
   function resetModelSettings() {
@@ -1192,8 +1295,52 @@ export default function App() {
       setProfile(next);
       setColumnsInput(next.columns.map((column) => column.name).join(", "));
       setActiveStep(1);
-      setStatus("字段画像已生成。");
-      void refreshDatasetContext(file);
+      setStatus("字段画像已生成，正在自动填写含义…");
+      await refreshDatasetContext(file);
+
+      // 先用本地规则立刻填一版，避免空白表等 AI；再后台用模型润色。
+      const identityNow = await ensureIdentity();
+      if (!identityNow) {
+        setStatus("字段画像已生成，但未能建立数据集标识。");
+        return;
+      }
+
+      setBusy("dictionary");
+      const quick = await inferVariableDict({
+        research_question: question.trim(),
+        dataset_id: identityNow.dataset_id,
+        dataset_hash: identityNow.dataset_hash,
+        columns: next.columns,
+        existing: null,
+        reuse_stored: false,
+        llm_config: { enabled: false }
+      });
+      setDictionary(quick.dictionary);
+      writeCachedDictionary(quick.dictionary);
+      setDictionaryNotice("已先按列名自动填写，正在用你的模型补充更准确的含义…");
+
+      if (modelReady) {
+        const polished = await inferVariableDict({
+          research_question: question.trim(),
+          dataset_id: identityNow.dataset_id,
+          dataset_hash: identityNow.dataset_hash,
+          columns: next.columns,
+          existing: quick.dictionary,
+          reuse_stored: false,
+          llm_config: llmConfig
+        });
+        setDictionary(polished.dictionary);
+        writeCachedDictionary(polished.dictionary);
+        setDictionaryNotice(
+          polished.maas_error
+            ? `模型润色未成功，已保留自动释义：${polished.maas_error}`
+            : "AI 已填好各列含义，请核对不对的再改，然后点「确认无误」。"
+        );
+        setStatus("字段含义已自动填写，请核对。");
+      } else {
+        setDictionaryNotice("已按列名自动填写。配置 API 后可点「重新推断」让模型补充。");
+        setStatus("字段画像已生成（本地自动释义）。");
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "字段画像生成失败。");
     } finally {
@@ -1238,6 +1385,7 @@ export default function App() {
         dataset_hash: targetIdentity.dataset_hash,
         columns: targetProfile.columns,
         existing: null,
+        reuse_stored: false,
         llm_config: llmConfig
       });
       setDictionary(response.dictionary);
@@ -1397,8 +1545,9 @@ export default function App() {
     return next;
   }
 
-  async function inferDictionary() {
-    if (!profile) {
+  async function inferDictionary(targetProfile?: DataProfile) {
+    const source = targetProfile ?? profile;
+    if (!source) {
       setDictionaryNotice("请先生成字段画像，再推断变量含义。");
       return;
     }
@@ -1415,8 +1564,9 @@ export default function App() {
         research_question: question.trim(),
         dataset_id: current.dataset_id,
         dataset_hash: current.dataset_hash,
-        columns: profile.columns,
+        columns: source.columns,
         existing: dictionary,
+        reuse_stored: false,
         llm_config: llmConfig
       });
       setDictionary(response.dictionary);
@@ -1424,9 +1574,9 @@ export default function App() {
       setDictionaryNotice(
         response.maas_error
           ? `已用本地规则生成：${response.maas_error}`
-          : `变量字典已生成（${response.provider === "rules" ? "本地规则" : "模型"}），请逐列核对后点「保存并确认」。`
+          : `字段含义已由${response.provider === "rules" ? "本地规则" : "你的模型"}生成，请逐列判断对不对，再点「全部确认」。`
       );
-      setStatus("变量字典已生成。");
+      setStatus("字段含义已生成，请核对。");
     } catch (error) {
       const message = error instanceof Error ? error.message : "变量字典生成失败。";
       setDictionaryNotice(message);
@@ -1540,7 +1690,20 @@ export default function App() {
   function continueFromVersion(record: ModelRunRecord) {
     setActiveVersionId(record.version_id);
     setViewingVersionId(null);
-    setStatus(`下一次运行会以 ${record.version_id} 为父版本保存。`);
+    setRunResult(record.result);
+    setExplanation(record.ai_explanation);
+    setModelType(record.model);
+    setDependentVariable(record.config.dependent_variable ?? "");
+    setIndependentVariables(record.config.independent_variables.join(", "));
+    setEntityColumn(record.config.entity_column ?? "");
+    setTimeColumn(record.config.time_column ?? "");
+    setTreatmentColumn(record.config.treatment_column ?? "");
+    setRunningVariable(record.config.running_variable ?? "");
+    setInstrumentVariable(record.config.instrument_variable ?? "");
+    setActiveStep(2);
+    setStatus(
+      `已载入 ${record.version_id} 的变量选择。你可以继续增删自变量，再运行；新结果会作为它的分叉保存。`
+    );
   }
 
   async function compareVersions(leftId: string, rightId: string) {
@@ -1733,15 +1896,113 @@ export default function App() {
     setStatus("已打开历史会话。");
   }
 
+  function valueAsText(value: ChatAction["value"]): string {
+    if (Array.isArray(value)) return value.join(", ");
+    if (value == null) return "";
+    return String(value);
+  }
+
+  async function confirmDictionaryAllFromChat() {
+    if (!dictionary || !profile) return;
+    const patches = profile.columns.map((column) => {
+      const entry = dictionary.entries?.[column.name];
+      return {
+        column: column.name,
+        before: {
+          label: entry?.label ?? null,
+          description: entry?.description ?? null,
+          type: entry?.type ?? "unknown",
+          unit: entry?.unit ?? null,
+          value_labels: entry?.value_labels ?? {}
+        },
+        after: {},
+        op: "confirm" as const
+      };
+    });
+    await confirmDictionary(patches);
+  }
+
+  async function applyChatActions(actions: ChatAction[]) {
+    if (!actions.length) return;
+    const summary = actionSummary(actions);
+    for (const action of actions) {
+      switch (action.type) {
+        case "set_question":
+          updateQuestion(valueAsText(action.value));
+          break;
+        case "set_dependent":
+          setDependentVariable(valueAsText(action.value));
+          break;
+        case "set_independent":
+          setIndependentVariables(valueAsText(action.value));
+          break;
+        case "set_entity":
+          setEntityColumn(valueAsText(action.value));
+          break;
+        case "set_time":
+          setTimeColumn(valueAsText(action.value));
+          break;
+        case "set_treatment":
+          setTreatmentColumn(valueAsText(action.value));
+          break;
+        case "set_running":
+          setRunningVariable(valueAsText(action.value));
+          break;
+        case "set_instrument":
+          setInstrumentVariable(valueAsText(action.value));
+          break;
+        case "set_model": {
+          const nextModel = valueAsText(action.value);
+          if (MODEL_OPTIONS.some((item) => item.value === nextModel)) {
+            setModelType(nextModel);
+          }
+          break;
+        }
+        case "goto_step": {
+          const step = action.step ?? Number(action.value);
+          if (step >= 1 && step <= 4) setActiveStep(step);
+          break;
+        }
+        case "open_settings":
+          openModelSettings();
+          break;
+        case "run_profile":
+          await loadProfile();
+          break;
+        case "infer_dictionary":
+          await inferDictionary();
+          break;
+        case "infer_variables":
+          await infer();
+          break;
+        case "recommend_model":
+          await recommend();
+          break;
+        case "run_model":
+          await run();
+          break;
+        case "confirm_dictionary":
+          await confirmDictionaryAllFromChat();
+          break;
+        default:
+          break;
+      }
+    }
+    if (summary) {
+      setStatus(`小计已执行：${summary}。`);
+    }
+  }
+
   async function sendChat() {
     const message = chatInput.trim();
     if (!message || !currentChat) return;
 
     const missing = missingModelSettings(modelSettings);
     if (missing.length > 0) {
+      setSetupMode(true);
       setSettingsDraft({ ...modelSettings, enabled: true });
       setSettingsOpen(true);
-      setStatus(`请先在右上角设置里补全：${missing.join("、")}。`);
+      setStatus(`请先补全模型 API：${missing.join("、")}。`);
       return;
     }
 
@@ -1765,11 +2026,24 @@ export default function App() {
     setBusy("chat");
     try {
       const response = await chat(message, chatHistory.slice(-8), context, llmConfig);
-      saveChatMessages(sessionId, [...visibleHistory, { role: "assistant", content: response.reply }]);
-      setStatus(response.maas_error ? `回答来源：${providerLabel(response.provider)}。${response.maas_error}` : `回答来源：${providerLabel(response.provider)}。`);
+      const actions = normalizeActions(response.actions);
+      const replyText =
+        actions.length > 0
+          ? `${response.reply}\n\n> 已安排操作：${actionSummary(actions)}`
+          : response.reply;
+      saveChatMessages(sessionId, [...visibleHistory, { role: "assistant", content: replyText }]);
+      setStatus(
+        response.maas_error
+          ? `回答来源：${providerLabel(response.provider)}。${response.maas_error}`
+          : `回答来源：${providerLabel(response.provider)}。`
+      );
+      setBusy(null);
+      setPendingChatId(null);
+      if (actions.length > 0) {
+        await applyChatActions(actions);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "问答失败。");
-    } finally {
       setPendingChatId(null);
       setBusy(null);
     }
@@ -1860,11 +2134,25 @@ export default function App() {
       {settingsOpen ? (
         <SettingsDialog
           settings={settingsDraft}
+          setupMode={setupMode}
           onChange={updateModelSetting}
+          onApplyPreset={applyModelPreset}
           onSave={saveModelSettings}
           onReset={resetModelSettings}
-          onClose={() => setSettingsOpen(false)}
+          onSkip={skipModelSetup}
+          onClose={() => {
+            if (setupMode) return;
+            setSettingsOpen(false);
+          }}
         />
+      ) : null}
+
+      {bootMessage && health !== "online" ? (
+        <div className="boot-banner" role="status">
+          <span className="boot-spinner" aria-hidden="true" />
+          <strong>{bootMessage}</strong>
+          <span>窗口已打开，本地分析服务正在后台启动。</span>
+        </div>
       ) : null}
 
       <section className={workspaceClassName} ref={workspaceRef} style={workspaceStyle}>
@@ -1997,9 +2285,9 @@ export default function App() {
                 <div className="filename">{file?.name ?? "尚未选择文件"}</div>
                 <SampleScenarioBrief profile={profile} stage={sampleStage} />
                 <DataQualityBrief profile={profile} />
-                <button className="wide" type="button" onClick={loadProfile} disabled={!file || isWorking}>
+                <button className="wide" type="button" onClick={loadProfile} disabled={!file || isWorking || health !== "online"}>
                   <RefreshCw size={16} />
-                  <span>生成字段画像</span>
+                  <span>{busy === "profile" || busy === "dictionary" ? "处理中…" : "生成字段画像"}</span>
                 </button>
               </Panel>
               <PanelResizeHandle
@@ -2008,6 +2296,20 @@ export default function App() {
                 onPointerDown={(event) => startPanelResize("left", "data", event)}
                 onDoubleClick={() => resetPanelRail("left")}
               />
+              <Panel title="版本历史" icon={<History size={17} />} style={panelStyle("left", "versions")}>
+                <ModelRunHistory
+                  runs={runs}
+                  activeVersionId={activeVersionId}
+                  viewingVersionId={viewingVersionId}
+                  dictionary={dictionary}
+                  busy={compareBusy}
+                  notice={runSaveNotice}
+                  onOpen={openVersion}
+                  onContinue={continueFromVersion}
+                  onCompare={compareVersions}
+                  compact
+                />
+              </Panel>
             </aside>
 
             <ColumnResizeHandle
@@ -2075,6 +2377,21 @@ export default function App() {
               <div className="dynamic-panel">
                 {activeStep === 1 ? (
                   <div className="dynamic-stack">
+                    {!modelReady ? (
+                      <div className="setup-banner">
+                        <div>
+                          <strong>还没配置自己的模型 API</strong>
+                          <span>配置后，读数据时小计会用你的模型解释每个字段；对话也能直接操作工作台。</span>
+                        </div>
+                        <button type="button" onClick={() => {
+                          setSetupMode(true);
+                          setSettingsDraft({ ...modelSettings, enabled: true });
+                          setSettingsOpen(true);
+                        }}>
+                          去配置 API
+                        </button>
+                      </div>
+                    ) : null}
                     <Panel title="研究问题" icon={<MessageSquare size={17} />} style={panelStyle("main", "question")}>
                       <textarea
                         ref={questionInputRef}
@@ -2095,6 +2412,17 @@ export default function App() {
                     </Panel>
                     {profile ? (
                       <>
+                        <Panel title="字段含义核对" icon={<Wand2 size={17} />}>
+                          <VariableDictionaryPanel
+                            columns={profile.columns}
+                            dictionary={dictionary}
+                            busy={busy === "dictionary"}
+                            notice={dictionaryNotice}
+                            onInfer={() => void inferDictionary()}
+                            onPreview={previewDictionary}
+                            onConfirm={confirmDictionary}
+                          />
+                        </Panel>
                         <Panel title="字段画像" icon={<TableProperties size={17} />}>
                           <RelationshipCharts
                             file={file}
@@ -2109,7 +2437,7 @@ export default function App() {
                       <div className="profile-empty-state">
                         <TableProperties size={32} />
                         <p>尚未生成字段画像</p>
-                        <span>选择数据文件后点击左侧"生成字段画像"按钮</span>
+                        <span>{modelReady ? "选择数据文件后点击左侧「生成字段画像」，小计会自动解释每列含义" : "建议先配置 API，再生成字段画像"}</span>
                       </div>
                     )}
                   </div>
@@ -2156,19 +2484,7 @@ export default function App() {
                         <VariableColumnReference profile={profile} />
                       </div>
                     </Panel>
-                    {profile ? (
-                      <Panel title="变量字典" icon={<Wand2 size={17} />}>
-                        <VariableDictionaryPanel
-                          columns={profile.columns}
-                          dictionary={dictionary}
-                          busy={busy === "dictionary"}
-                          notice={dictionaryNotice}
-                          onInfer={inferDictionary}
-                          onPreview={previewDictionary}
-                          onConfirm={confirmDictionary}
-                        />
-                      </Panel>
-                    ) : null}
+                    <p className="note">字段含义在第 1 步已由 AI 填写；这里只需确认 Y / X 角色。</p>
                   </div>
                 ) : activeStep === 3 ? (
                   <div className="dynamic-stack">
@@ -2231,20 +2547,8 @@ export default function App() {
                         </button>
                       </div>
                     ) : null}
-                    {runs.length > 0 || runResult ? (
-                      <Panel title="运行版本" icon={<History size={17} />}>
-                        <ModelRunHistory
-                          runs={runs}
-                          activeVersionId={activeVersionId}
-                          viewingVersionId={viewingVersionId}
-                          dictionary={dictionary}
-                          busy={compareBusy}
-                          notice={runSaveNotice}
-                          onOpen={openVersion}
-                          onContinue={continueFromVersion}
-                          onCompare={compareVersions}
-                        />
-                      </Panel>
+                    {runs.length > 0 ? (
+                      <p className="note">完整版本历史在左侧「版本历史」，可像 git 一样回看与对比。</p>
                     ) : null}
                     {comparison ? (
                       <Panel title="版本对比" icon={<ArrowRightLeft size={17} />}>
@@ -2470,40 +2774,40 @@ function Panel({
 function UserGuideView() {
   const sections = [
     {
-      title: "1. 打开和确认状态",
+      title: "1. 填写你的模型 API",
+      text: "第一次打开会先要求填写自己的模型 API：请求地址、模型名称和 API Key。配置保存在本机，不写进代码。也可以点「稍后再说」先用本地规则；之后随时可在右上角齿轮修改。"
+    },
+    {
+      title: "2. 打开和确认状态",
       text: "双击项目根目录的 小计.exe。启动后看顶部状态条：显示「后端服务在线」时，本地分析服务已经准备好。工作台以中栏 4 步分析流程为主轴，左侧放数据端信息，右侧是浮动问答小窗。"
     },
     {
-      title: "2. 选择数据或使用示例",
+      title: "3. 选择数据或使用示例",
       text: "自己的数据点击左侧「选择」，支持 CSV、xlsx、xls。想快速体验完整流程时点击「示例」，它会加载城市面板示例数据，并自动准备研究问题、变量、模型推荐、运行结果和报告草稿。"
     },
     {
-      title: "3. 生成字段画像",
-      text: "选择文件后点击左侧「生成字段画像」。小计会读取字段类型、缺失值、唯一值、样例值、重复行、可能的个体列和时间列，还会把明显的数据质量风险提前列出来。生成后中栏第 1 步会展示关系地图和字段详情表。"
+      title: "4. 生成字段画像并核对含义",
+      text: "选择文件后点击左侧「生成字段画像」。小计会先读字段类型与质量，再用你的模型解释每一列是什么意思。请在第 1 步「字段含义核对」里判断对不对，改完后点「全部确认」。同时还能看关系网络、散点、热力、直方、箱线和分类柱状图。"
     },
     {
-      title: "4. 填写研究问题和变量（第 1-2 步）",
-      text: "中栏第 1 步填写研究问题，例如「数字经济发展是否会提升城市创新水平？」。第 2 步填写被解释变量 Y、解释变量 X，以及个体列、时间列、处理列、断点变量或工具变量。多个 X 用英文逗号分隔。点击左侧步骤按钮即可切换。"
+      title: "5. 填写研究问题和变量（第 1-2 步）",
+      text: "中栏第 1 步填写研究问题，例如「数字经济发展是否会提升城市创新水平？」。第 2 步填写被解释变量 Y、解释变量 X，以及个体列、时间列、处理列、断点变量或工具变量。也可以直接对右侧小计说：「把创新指数设为 Y 并识别变量」。"
     },
     {
-      title: "5. 推荐并运行模型（第 3 步）",
+      title: "6. 推荐并运行模型（第 3 步）",
       text: "进入中栏第 3 步，点击「推荐模型」后小计会根据研究问题、字段和变量配置给出模型建议。确认模型类型后点击「运行模型」。当前 OLS、Logit、面板固定效应支持直接运行；DID、RDD、IV-2SLS 会先给识别路径、检查清单和代码模板。完整模型检验框架见项目文档 docs/model-check-framework.md。"
     },
     {
-      title: "6. 查看研究路径",
+      title: "7. 查看研究路径",
       text: "第 3 步动态面板中会展示研究路径，包含候选研究问题、变量设定、识别思路、假设边界和协作检查点。候选问题可以直接采用，也可以放入右侧问答继续展开。"
     },
     {
-      title: "7. 使用小计问答（右侧浮动窗）",
-      text: "点击右下角「小计」浮动按钮打开问答窗。问答会读取当前字段画像、研究问题、变量配置、模型推荐、模型结果和报告草稿。建议先生成字段画像和模型推荐，再输入自己的问题，例如「为什么推荐这个模型」「系数怎么解释」「下一步要检查什么」。"
+      title: "8. 使用小计问答（右侧浮动窗）",
+      text: "点击右下角「小计」浮动按钮打开问答窗。你可以提问，也可以直接下指令，例如「把创新指数设为 Y」「推荐模型」「运行 OLS」。小计会改工作台字段、跳转步骤并触发对应操作。问答同样会读取当前画像、变量、推荐与结果上下文。"
     },
     {
-      title: "8. 生成和导出报告（第 4 步）",
+      title: "9. 生成和导出报告（第 4 步）",
       text: "进入第 4 步点击「生成报告」，再点击「查看报告」进入全屏报告页。报告页左侧有目录，中间是 Markdown 预览，右侧可以打开小计对话辅助润色。支持导出 MD 和 PDF。"
-    },
-    {
-      title: "9. 配置模型",
-      text: "右上角齿轮用于配置大模型。需要填请求地址、模型名称和 API Key。配置保存在本机，不写进代码。未配置时，小计会提示先补全模型设置。"
     },
     {
       title: "10. 常见问题",
@@ -2636,37 +2940,72 @@ function SampleScenarioBrief({
 
 function SettingsDialog({
   settings,
+  setupMode,
   onChange,
+  onApplyPreset,
   onSave,
   onReset,
+  onSkip,
   onClose
 }: {
   settings: ModelSettings;
+  setupMode: boolean;
   onChange: <K extends keyof ModelSettings>(key: K, value: ModelSettings[K]) => void;
+  onApplyPreset: (preset: ModelPreset) => void;
   onSave: () => void;
   onReset: () => void;
+  onSkip: () => void;
   onClose: () => void;
 }) {
+  const activePreset = detectPreset(settings);
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
-      <section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section
+        className={`settings-dialog ${setupMode ? "settings-dialog-setup" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="settings-head">
           <div>
-            <p className="eyebrow">模型连接</p>
-            <h2 id="settings-title">设置</h2>
+            <p className="eyebrow">{setupMode ? "使用前第一步" : "模型连接"}</p>
+            <h2 id="settings-title">{setupMode ? "填写你的模型 API" : "设置"}</h2>
           </div>
-          <button className="icon-button" type="button" onClick={onClose} title="关闭" aria-label="关闭">
-            <X size={18} />
-          </button>
+          {!setupMode ? (
+            <button className="icon-button" type="button" onClick={onClose} title="关闭" aria-label="关闭">
+              <X size={18} />
+            </button>
+          ) : null}
         </div>
 
-        <div className="settings-switch">
-          <label className="toggle-field">
-            <input type="checkbox" checked={settings.enabled} onChange={(event) => onChange("enabled", event.target.checked)} />
-            <span>启用自定义模型</span>
-          </label>
-          <span className="settings-mode">{settings.enabled ? "自定义模型" : "本地规则"}</span>
+        <p className="settings-lead">
+          支持任意 OpenAI 兼容接口：填「请求地址 + 模型名称 + API Key」即可。下面预设只是快捷填充，也可选「自定义」手填学校/公司网关。
+        </p>
+
+        <div className="settings-presets">
+          {MODEL_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className={activePreset === preset.id ? "settings-preset settings-preset-active" : "settings-preset"}
+              onClick={() => onApplyPreset(preset)}
+            >
+              <strong>{preset.label}</strong>
+              <span>{preset.hint}</span>
+            </button>
+          ))}
         </div>
+
+        {!setupMode ? (
+          <div className="settings-switch">
+            <label className="toggle-field">
+              <input type="checkbox" checked={settings.enabled} onChange={(event) => onChange("enabled", event.target.checked)} />
+              <span>启用自定义模型</span>
+            </label>
+            <span className="settings-mode">{settings.enabled ? "自定义模型" : "本地规则"}</span>
+          </div>
+        ) : null}
 
         <div className="settings-form">
           <label className="field">
@@ -2681,7 +3020,7 @@ function SettingsDialog({
             <span>模型名称</span>
             <input
               value={settings.model}
-              placeholder="deepseek-chat"
+              placeholder="按服务商控制台填写，如 gpt-4o-mini / qwen-plus"
               onChange={(event) => onChange("model", event.target.value)}
             />
           </label>
@@ -2706,16 +3045,24 @@ function SettingsDialog({
           </label>
         </div>
 
-        <div className="settings-note">配置仅保存在当前电脑；打开开关后生效。</div>
+        <div className="settings-note">
+          只要服务商提供 OpenAI Chat Completions 兼容接口就能用。配置只保存在本机，不会写入项目代码。
+        </div>
 
         <div className="settings-actions">
-          <button className="secondary" type="button" onClick={onReset}>
-            <RotateCcw size={16} />
-            <span>恢复默认</span>
-          </button>
+          {setupMode ? (
+            <button className="secondary" type="button" onClick={onSkip}>
+              <span>稍后再说</span>
+            </button>
+          ) : (
+            <button className="secondary" type="button" onClick={onReset}>
+              <RotateCcw size={16} />
+              <span>恢复默认</span>
+            </button>
+          )}
           <button type="button" onClick={onSave}>
             <Save size={16} />
-            <span>保存</span>
+            <span>{setupMode ? "保存并开始" : "保存"}</span>
           </button>
         </div>
       </section>
@@ -2906,48 +3253,39 @@ function ProfileTable({ profile, dictionary }: { profile: DataProfile | null; di
         </div>
       )}
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>字段名</th>
-              <th>中文名</th>
-              <th>类型判断</th>
-              <th>原始类型</th>
-              <th>缺失</th>
-              <th>缺失率</th>
-              <th>唯一值</th>
-              <th>最小值</th>
-              <th>最大值</th>
-              <th>样例值</th>
-            </tr>
-          </thead>
-          <tbody>
-            {profile.columns.map((column) => {
-              const decoded = decodeSamples(column, dictionary);
-              return (
-                <tr key={column.name}>
-                  <td title={column.name}>{column.name}</td>
-                  <td title={dictionary?.entries?.[column.name]?.description ?? ""}>
-                    {dictionary?.entries?.[column.name]?.label ?? <span className="note">待确认</span>}
-                  </td>
-                  <td>{column.kind ?? "未知"}</td>
-                  <td>{dtypeLabel(column.dtype)}</td>
-                  <td>{column.missing}</td>
-                  <td>{formatPercent(column.missing_rate)}</td>
-                  <td>{column.unique}</td>
-                  <td className="numeric-cell">{formatRangeBound(column.min)}</td>
-                  <td className="numeric-cell">{formatRangeBound(column.max)}</td>
-                  <td title={column.sample_values.join(", ")}>
-                    <span>{column.sample_values.join(", ")}</span>
-                    {decoded ? <span className="sample-decoded">{decoded}</span> : null}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <details className="profile-details">
+        <summary>字段明细（{profile.columns_count} 列）</summary>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>字段</th>
+                <th>类型</th>
+                <th>缺失</th>
+                <th>样例</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profile.columns.map((column) => {
+                const entry = dictionary?.entries?.[column.name];
+                return (
+                  <tr key={column.name}>
+                    <td title={entry?.description ?? column.name}>
+                      <strong>{entry?.label || column.name}</strong>
+                      {entry?.label && entry.label !== column.name ? (
+                        <span className="note"> · {column.name}</span>
+                      ) : null}
+                    </td>
+                    <td>{column.kind ?? dtypeLabel(column.dtype)}</td>
+                    <td>{formatPercent(column.missing_rate)}</td>
+                    <td title={column.sample_values.join(", ")}>{column.sample_values.slice(0, 3).join(", ")}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   );
 }

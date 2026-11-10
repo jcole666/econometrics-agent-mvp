@@ -9,13 +9,14 @@ export const MIN_RIGHT_RAIL = 320;
 export const COLUMN_RESIZER_WIDTH = 12;
 
 export const DEFAULT_PANEL_HEIGHTS = {
-  left: { data: 540, variables: 420, report: 310 },
+  left: { data: 320, versions: 360, variables: 420, report: 310 },
   main: { question: 220, profile: 300, path: 360, recommendation: 280, result: 280 },
   right: { chat: 660 }
 };
 
 const PANEL_MIN_HEIGHTS = {
-  data: 360,
+  data: 240,
+  versions: 220,
   question: 170,
   variables: 280,
   report: 220,

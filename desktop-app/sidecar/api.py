@@ -21,6 +21,9 @@ from sidecar.schemas import (
     RunModelResponse,
     ScatterResponse,
     CorrHeatmapResponse,
+    HistogramResponse,
+    BoxplotResponse,
+    CategoryBarResponse,
     ExplainModelRequest,
     ModelExplanation,
     ModelRunCompareRequest,
@@ -51,7 +54,13 @@ from sidecar.services.model_runs import (
     list_runs,
 )
 from sidecar.services.model_selector import select_model
-from sidecar.services.relationship_stats import corr_heatmap, scatter_stats
+from sidecar.services.relationship_stats import (
+    boxplot_stats,
+    category_bar_stats,
+    corr_heatmap,
+    histogram_stats,
+    scatter_stats,
+)
 from sidecar.services.report_generator import generate_markdown_report
 from sidecar.services.variable_dictionary import (
     confirm_patches,
@@ -274,6 +283,54 @@ async def relationship_corr_heatmap(
     selected = [item.strip() for item in columns.split(",") if item.strip()]
     try:
         return corr_heatmap(df, selected)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/relationship/histogram", response_model=HistogramResponse)
+async def relationship_histogram(
+    file: UploadFile = File(...),
+    column: str = Form(...),
+    bins: int = Form(12),
+) -> HistogramResponse:
+    try:
+        df = await read_upload_dataframe(file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return histogram_stats(df, column, bins=bins)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/relationship/boxplot", response_model=BoxplotResponse)
+async def relationship_boxplot(
+    file: UploadFile = File(...),
+    columns: str = Form(...),
+) -> BoxplotResponse:
+    try:
+        df = await read_upload_dataframe(file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    selected = [item.strip() for item in columns.split(",") if item.strip()]
+    try:
+        return boxplot_stats(df, selected)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/relationship/category-bar", response_model=CategoryBarResponse)
+async def relationship_category_bar(
+    file: UploadFile = File(...),
+    column: str = Form(...),
+    top_n: int = Form(10),
+) -> CategoryBarResponse:
+    try:
+        df = await read_upload_dataframe(file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return category_bar_stats(df, column, top_n=top_n)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

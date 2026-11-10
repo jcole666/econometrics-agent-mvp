@@ -44,7 +44,7 @@ export const SAMPLE_STATUS = {
 export const SAMPLE_RAIL_WIDTHS = { left: 370, right: 420 };
 
 export const SAMPLE_PANEL_HEIGHTS = {
-  left: { data: 640, variables: 330, report: 360 },
+  left: { data: 360, versions: 320, variables: 330, report: 360 },
   main: { question: 210, profile: 300, path: 430, recommendation: 280, result: 330 },
   right: { chat: 760 }
 };

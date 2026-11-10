@@ -11,8 +11,14 @@ import numpy as np
 import pandas as pd
 
 from sidecar.schemas import (
+    BoxplotResponse,
+    BoxplotStats,
+    CategoryBarItem,
+    CategoryBarResponse,
     ChartCaption,
     CorrHeatmapResponse,
+    HistogramBin,
+    HistogramResponse,
     ScatterFit,
     ScatterPoint,
     ScatterResponse,
@@ -224,3 +230,148 @@ def _heatmap_caption(columns: list[str], matrix: list[list[float | None]], n_mat
 
     caveat = "系数只反映线性关系；非线性关系、异常值和样本构成变化都可能让系数失真，且同样不能作为因果证据。"
     return ChartCaption(how_to_read=how_to_read, finding=finding, caveat=caveat)
+
+
+def histogram_stats(df: pd.DataFrame, column: str, bins: int = 12) -> HistogramResponse:
+    _require_columns(df, [column])
+    series = pd.to_numeric(df[column], errors="coerce").dropna()
+    n = int(len(series))
+    warnings: list[str] = []
+    if n == 0:
+        return HistogramResponse(
+            column=column,
+            n=0,
+            warnings=[f"{column} 没有可用数值，无法画直方图。"],
+            caption=ChartCaption(
+                how_to_read="直方图展示数值变量的分布形状。",
+                finding="当前列没有可用观测。",
+                caveat="请确认该列是数值型。",
+            ),
+        )
+
+    bin_count = max(4, min(24, int(bins) if bins else 12))
+    if series.nunique() < 2:
+        warnings.append("取值几乎恒定，直方图只反映集中位置。")
+        bin_count = 1
+
+    counts, edges = np.histogram(series.to_numpy(dtype=float), bins=bin_count)
+    hist_bins = [
+        HistogramBin(left=round(float(edges[i]), 6), right=round(float(edges[i + 1]), 6), count=int(counts[i]))
+        for i in range(len(counts))
+    ]
+    mean = float(series.mean())
+    std = float(series.std(ddof=1)) if n >= 2 else None
+    finding = f"有效样本 {n} 个，均值约 {mean:.4g}"
+    if std is not None and math.isfinite(std):
+        finding += f"，标准差约 {std:.4g}"
+    peak = max(hist_bins, key=lambda item: item.count)
+    finding += f"；最高频落在 [{peak.left:.4g}, {peak.right:.4g}]，共 {peak.count} 个观测。"
+
+    return HistogramResponse(
+        column=column,
+        bins=hist_bins,
+        n=n,
+        mean=round(mean, 6),
+        std=round(std, 6) if std is not None and math.isfinite(std) else None,
+        warnings=warnings,
+        caption=ChartCaption(
+            how_to_read=f"横轴是 {column} 的取值区间，纵轴是落入该区间的观测数。",
+            finding=finding,
+            caveat="直方图只描述分布，不说明因果关系；异常值与分箱宽度都会改变观感。",
+        ),
+    )
+
+
+def boxplot_stats(df: pd.DataFrame, columns: list[str]) -> BoxplotResponse:
+    ordered = list(dict.fromkeys(column for column in columns if column))[:6]
+    _require_columns(df, ordered)
+    series_list: list[BoxplotStats] = []
+    warnings: list[str] = []
+
+    for column in ordered:
+        values = pd.to_numeric(df[column], errors="coerce").dropna()
+        n = int(len(values))
+        if n == 0:
+            warnings.append(f"{column} 没有可用数值。")
+            series_list.append(BoxplotStats(column=column, n=0))
+            continue
+        q1 = float(values.quantile(0.25))
+        median = float(values.quantile(0.5))
+        q3 = float(values.quantile(0.75))
+        iqr = q3 - q1
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+        outliers = [round(float(v), 6) for v in values if v < lower or v > upper]
+        whisker_low = float(values[values >= lower].min()) if n else None
+        whisker_high = float(values[values <= upper].max()) if n else None
+        series_list.append(
+            BoxplotStats(
+                column=column,
+                n=n,
+                min=round(whisker_low, 6) if whisker_low is not None else None,
+                q1=round(q1, 6),
+                median=round(median, 6),
+                q3=round(q3, 6),
+                max=round(whisker_high, 6) if whisker_high is not None else None,
+                outlier_count=len(outliers),
+                outliers=outliers[:40],
+            )
+        )
+        if len(outliers) > 0:
+            warnings.append(f"{column} 有 {len(outliers)} 个箱线图异常值（按 1.5×IQR）。")
+
+    names = "、".join(ordered[:3])
+    return BoxplotResponse(
+        columns=ordered,
+        series=series_list,
+        warnings=warnings,
+        caption=ChartCaption(
+            how_to_read="箱体是四分位距，中线是中位数，须线延伸到非异常的最小/最大值，圆点是异常值。",
+            finding=f"对比 {names} 的中心位置、离散程度与异常值数量。",
+            caveat="异常值按常规 1.5×IQR 规则标记，是否删除要结合研究问题判断。",
+        ),
+    )
+
+
+def category_bar_stats(df: pd.DataFrame, column: str, top_n: int = 10) -> CategoryBarResponse:
+    _require_columns(df, [column])
+    series = df[column].dropna().astype(str)
+    n = int(len(series))
+    if n == 0:
+        return CategoryBarResponse(
+            column=column,
+            n=0,
+            unique=0,
+            warnings=[f"{column} 没有可用取值。"],
+            caption=ChartCaption(
+                how_to_read="柱状图展示分类变量各类别的频数。",
+                finding="当前列没有可用观测。",
+                caveat="请先确认该列有内容。",
+            ),
+        )
+
+    counts = series.value_counts()
+    unique = int(counts.shape[0])
+    limit = max(3, min(20, int(top_n) if top_n else 10))
+    warnings: list[str] = []
+    if unique > limit:
+        warnings.append(f"共有 {unique} 类，图上只展示频次最高的 {limit} 类。")
+        counts = counts.head(limit)
+
+    items = [
+        CategoryBarItem(label=str(label)[:40], count=int(count), share=round(float(count) / n, 4))
+        for label, count in counts.items()
+    ]
+    top = items[0]
+    return CategoryBarResponse(
+        column=column,
+        items=items,
+        n=n,
+        unique=unique,
+        warnings=warnings,
+        caption=ChartCaption(
+            how_to_read=f"横轴是 {column} 的类别，纵轴是频数；括号内是占比。",
+            finding=f"最常见类别是「{top.label}」，共 {top.count} 个（{top.share:.1%}）；共 {unique} 类。",
+            caveat="类别过多或长尾分布时，建模前常需要合并稀疏类。",
+        ),
+    )

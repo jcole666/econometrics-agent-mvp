@@ -23,7 +23,6 @@ interface DraftRow {
   description: string;
   type: VariableSemanticType;
   unit: string;
-  /** 编码用单行文本编辑：`1=高一;2=高二`，落库前转回 Record<string, string>。 */
   valueLabels: string;
 }
 
@@ -44,9 +43,18 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [localNotice, setLocalNotice] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const stats = useMemo(() => dictionaryStats(dictionary), [dictionary]);
   const version = dictionary?.version ?? 0;
+  const pendingCount = Math.max(0, stats.total - stats.confirmed);
+  // 仅依赖 version 不够：同版本号下含义被填上时草稿不会刷新，输入框一直显示占位符
+  const contentStamp = useMemo(() => {
+    if (!dictionary) return "empty";
+    return Object.entries(dictionary.entries)
+      .map(([name, entry]) => `${name}|${entry.description ?? ""}|${entry.label ?? ""}|${entry.type}|${entry.confirmed}`)
+      .join(";");
+  }, [dictionary]);
 
   useEffect(() => {
     const next: Record<string, DraftRow> = {};
@@ -64,7 +72,7 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
     setPreview(null);
     setChecked({});
     setLocalNotice(null);
-  }, [columns, version]);
+  }, [columns, version, contentStamp, dictionary]);
 
   function updateRow(column: string, patch: Partial<DraftRow>) {
     setDraft((current) => ({ ...current, [column]: { ...(current[column] ?? emptyRow()), ...patch } }));
@@ -82,7 +90,6 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
       if (row.description.trim() !== (entry?.description ?? "")) after.description = row.description.trim();
       if (row.type !== (entry?.type ?? "unknown")) after.type = row.type;
       if (row.unit.trim() !== (entry?.unit ?? "")) after.unit = row.unit.trim();
-      // 编码：文本形式一致就不提交；改了（含清空）就把整份映射发过去，后端整体覆盖。
       if (row.valueLabels.trim() !== labelsToText(entry?.value_labels).trim()) {
         after.value_labels = textToLabels(row.valueLabels);
       }
@@ -115,6 +122,31 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
     }
     const ok = await onConfirm(patches);
     setLocalNotice(ok ? `已保存并确认 ${patches.length} 列。` : "保存失败，请查看顶部状态提示。");
+  }
+
+  async function confirmAllCurrent() {
+    if (!dictionary) return;
+    const edits = collectEdits();
+    const editMap = new Map(edits.map((item) => [item.column, item]));
+    const patches: VariableDictPatchItem[] = columns.map((column) => {
+      const existing = editMap.get(column.name);
+      if (existing) return existing;
+      const entry = dictionary.entries?.[column.name];
+      return {
+        column: column.name,
+        before: {
+          label: entry?.label ?? null,
+          description: entry?.description ?? null,
+          type: entry?.type ?? "unknown",
+          unit: entry?.unit ?? null,
+          value_labels: entry?.value_labels ?? {}
+        },
+        after: {},
+        op: "confirm"
+      };
+    });
+    const ok = await onConfirm(patches);
+    setLocalNotice(ok ? `已确认全部 ${patches.length} 列释义。` : "确认失败，请查看顶部状态提示。");
   }
 
   async function runPreview() {
@@ -158,15 +190,23 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
     <div className="vdict">
       <div className="vdict-head">
         <span className="note">
-          变量字典描述「每一列是什么意思」，和上面的 Y / X 角色识别是两件事。
-          {dictionary ? ` 已确认 ${stats.confirmed}/${stats.total} 列，第 ${version} 版。` : " 尚未生成。"}
+          {busy
+            ? "小计正在理解每列含义…"
+            : dictionary
+              ? pendingCount > 0
+                ? `AI 已先填好释义，还有 ${pendingCount} 列待你确认。`
+                : `全部 ${stats.total} 列已确认（第 ${version} 版）。`
+              : "生成画像后会自动填充释义。"}
         </span>
         <div className="vdict-actions">
           <button type="button" onClick={onInfer} disabled={busy || columns.length === 0}>
-            {dictionary ? "重新推断" : "生成变量字典"}
+            {busy ? "推断中…" : dictionary ? "重新推断" : "AI 填充"}
           </button>
           <button type="button" className="secondary" onClick={saveEdits} disabled={busy || !dictionary}>
-            保存并确认
+            保存修改
+          </button>
+          <button type="button" onClick={confirmAllCurrent} disabled={busy || !dictionary || pendingCount === 0}>
+            确认无误
           </button>
         </div>
       </div>
@@ -175,139 +215,132 @@ export function VariableDictionaryPanel({ columns, dictionary, busy, notice, onI
       {localNotice ? <p className="note">{localNotice}</p> : null}
 
       {dictionary ? (
-        <div className="table-wrap">
-          <table className="vdict-table">
-            <thead>
-              <tr>
-                <th>原始列名</th>
-                <th>中文名称</th>
-                <th>含义</th>
-                <th>类型</th>
-                <th>单位</th>
-                <th>编码</th>
-                <th>可信度</th>
-                <th>状态</th>
-              </tr>
-            </thead>
-            <tbody>
-              {columns.map((column) => {
-                const entry = dictionary.entries?.[column.name];
-                const row = draft[column.name] ?? emptyRow();
-                return (
-                  <tr key={column.name}>
-                    <td title={column.name}>{column.name}</td>
-                    <td>
-                      <input
-                        className="vdict-input"
-                        value={row.label}
-                        placeholder="待确认"
-                        onChange={(event) => updateRow(column.name, { label: event.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="vdict-input"
-                        value={row.description}
-                        placeholder="这列代表什么"
-                        onChange={(event) => updateRow(column.name, { description: event.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        className="vdict-input"
-                        value={row.type}
-                        onChange={(event) => updateRow(column.name, { type: event.target.value as VariableSemanticType })}
-                      >
-                        {TYPE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
+        <div className="vdict-cards">
+          {columns.map((column) => {
+            const entry = dictionary.entries?.[column.name];
+            const row = draft[column.name] ?? emptyRow();
+            const labelSameAsName = row.label.trim() === column.name;
+            return (
+              <div className={`vdict-card ${entry?.confirmed ? "vdict-card-ok" : ""}`} key={column.name}>
+                <div className="vdict-card-top">
+                  <strong title={column.name}>{column.name}</strong>
+                  <select
+                    className="vdict-input vdict-type"
+                    value={row.type}
+                    onChange={(event) => updateRow(column.name, { type: event.target.value as VariableSemanticType })}
+                  >
+                    {TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <span className={entry?.confirmed ? "vdict-badge vdict-badge-ok" : "vdict-badge"}>
+                    {entry?.confirmed ? "已确认" : "待确认"}
+                  </span>
+                </div>
+                <label className="vdict-field">
+                  <span>含义</span>
+                  <input
+                    className="vdict-input"
+                    value={row.description}
+                    placeholder={busy ? "正在由 AI 填写…" : "这列代表什么"}
+                    onChange={(event) => updateRow(column.name, { description: event.target.value })}
+                  />
+                </label>
+                {!labelSameAsName || showAdvanced ? (
+                  <label className="vdict-field">
+                    <span>显示名</span>
+                    <input
+                      className="vdict-input"
+                      value={row.label}
+                      placeholder={column.name}
+                      onChange={(event) => updateRow(column.name, { label: event.target.value })}
+                    />
+                  </label>
+                ) : null}
+                {showAdvanced ? (
+                  <div className="vdict-card-extra">
+                    <label className="vdict-field">
+                      <span>单位</span>
                       <input
                         className="vdict-input"
                         value={row.unit}
                         placeholder="无"
                         onChange={(event) => updateRow(column.name, { unit: event.target.value })}
                       />
-                    </td>
-                    <td>
+                    </label>
+                    <label className="vdict-field">
+                      <span>编码</span>
                       <input
-                        className="vdict-input vdict-input-wide"
+                        className="vdict-input"
                         value={row.valueLabels}
-                        placeholder="如 1=高一;2=高二"
-                        title="只写元数据，不改原始数据。格式：编码=含义，用 ; 分隔"
+                        placeholder="如 1=是;0=否"
                         onChange={(event) => updateRow(column.name, { valueLabels: event.target.value })}
                       />
-                    </td>
-                    <td>{entry?.confidence != null ? `${Math.round(entry.confidence * 100)}%` : "—"}</td>
-                    <td>
-                      <span className={entry?.confirmed ? "vdict-badge vdict-badge-ok" : "vdict-badge"}>
-                        {entry?.confirmed ? "已确认" : "待确认"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </label>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="empty compact-empty">
-          还没有变量字典。点「生成变量字典」，小计会按列名与样例值给出中文名称、类型和单位，再由你确认。
+          {busy ? "正在根据列名与样例值自动填写含义…" : "还没有字段释义。生成字段画像后会自动填充。"}
         </div>
       )}
 
       {dictionary ? (
-        <div className="vdict-chat">
-          <label>对话修正</label>
+        <div className="vdict-footer">
+          <button type="button" className="secondary" onClick={() => setShowAdvanced((value) => !value)}>
+            {showAdvanced ? "收起单位/编码" : "展开单位/编码"}
+          </button>
           <div className="vdict-chat-row">
             <input
               className="vdict-input"
               value={message}
-              placeholder="例如：「创新指数」是城市创新水平，越高越好"
+              placeholder="一句话修正，例如：智慧城市试点 1=试点市"
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && runPreview()}
             />
             <button type="button" className="secondary" onClick={runPreview} disabled={busy || previewBusy}>
-              {previewBusy ? "解析中" : "预览修改"}
+              {previewBusy ? "解析中" : "改这一处"}
             </button>
           </div>
+        </div>
+      ) : null}
 
-          {preview ? (
-            <div className="vdict-preview">
-              <p className="note">{preview.assistant_summary}</p>
-              {preview.preview.length ? (
-                <>
-                  <ul className="vdict-preview-list">
-                    {preview.preview.map((item) => (
-                      <li key={item.column}>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(checked[item.column])}
-                            onChange={(event) =>
-                              setChecked((current) => ({ ...current, [item.column]: event.target.checked }))
-                            }
-                          />
-                          <strong>{item.column}</strong>
-                          <span>
-                            {item.op === "confirm"
-                              ? "标记为已确认"
-                              : Object.entries(item.after)
-                                  .map(([key, value]) => `${fieldLabel(key)} → ${formatPatchValue(key, value)}`)
-                                  .join("；")}
-                          </span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                  <button type="button" onClick={applyPreview} disabled={busy}>
-                    应用勾选项
-                  </button>
-                </>
-              ) : null}
-            </div>
+      {preview ? (
+        <div className="vdict-preview">
+          <p className="note">{preview.assistant_summary}</p>
+          {preview.preview.length ? (
+            <>
+              <ul className="vdict-preview-list">
+                {preview.preview.map((item) => (
+                  <li key={item.column}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(checked[item.column])}
+                        onChange={(event) =>
+                          setChecked((current) => ({ ...current, [item.column]: event.target.checked }))
+                        }
+                      />
+                      <strong>{item.column}</strong>
+                      <span>
+                        {item.op === "confirm"
+                          ? "标记为已确认"
+                          : Object.entries(item.after)
+                              .map(([key, value]) => `${fieldLabel(key)} → ${formatPatchValue(key, value)}`)
+                              .join("；")}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <button type="button" onClick={applyPreview} disabled={busy}>
+                应用勾选项
+              </button>
+            </>
           ) : null}
         </div>
       ) : null}
@@ -319,7 +352,6 @@ function emptyRow(): DraftRow {
   return { label: "", description: "", type: "unknown", unit: "", valueLabels: "" };
 }
 
-/** Record<string,string> → `1=高一;2=高二`（按编码自然序，避免 10 跑到 2 前面）。 */
 function labelsToText(labels: Record<string, string> | null | undefined): string {
   if (!labels) return "";
   return Object.entries(labels)
@@ -328,7 +360,6 @@ function labelsToText(labels: Record<string, string> | null | undefined): string
     .join(";");
 }
 
-/** `1=高一;2=高二` → Record。中文分号、逗号、换行都当分隔符；只写元数据，不碰原始数据。 */
 function textToLabels(text: string): Record<string, string> {
   const result: Record<string, string> = {};
   const parts = text.split(/[;；,，\n\r]+/);
@@ -346,7 +377,6 @@ function textToLabels(text: string): Record<string, string> {
   return result;
 }
 
-/** 预览里把 value_labels 这类对象值渲染成人话，而不是 [object Object]。 */
 function formatPatchValue(key: string, value: unknown): string {
   if (key === "value_labels" && value && typeof value === "object") {
     const text = labelsToText(value as Record<string, string>);

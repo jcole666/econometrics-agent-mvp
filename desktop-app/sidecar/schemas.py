@@ -68,10 +68,17 @@ class ChatRequest(BaseModel):
     llm_config: LLMConfig | None = None
 
 
+class ChatAction(BaseModel):
+    type: str = Field(..., description="工作台操作类型，如 set_question / run_model")
+    value: str | float | list[str] | None = None
+    step: int | None = Field(None, description="goto_step 时使用的步骤号 1-4")
+
+
 class ChatResponse(BaseModel):
     reply: str
     provider: str = "rules"
     maas_error: str | None = None
+    actions: list[ChatAction] = Field(default_factory=list, description="小计建议前端执行的工作台操作")
 
 
 class ColumnInfo(BaseModel):
@@ -173,6 +180,8 @@ class VariableDictInferRequest(BaseModel):
     dataset_hash: str = ""
     columns: list[dict] = Field(default_factory=list)
     existing: VariableDictionary | None = None
+    # False：忽略磁盘上已存字典（避免「确认过但含义为空」把推断永久锁死）
+    reuse_stored: bool = True
     llm_config: LLMConfig | None = None
 
 
@@ -362,5 +371,55 @@ class CorrHeatmapResponse(BaseModel):
     columns: list[str] = Field(default_factory=list)
     matrix: list[list[float | None]] = Field(default_factory=list)
     n_matrix: list[list[int]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    caption: ChartCaption = Field(default_factory=ChartCaption)
+
+
+class HistogramBin(BaseModel):
+    left: float
+    right: float
+    count: int
+
+
+class HistogramResponse(BaseModel):
+    column: str
+    bins: list[HistogramBin] = Field(default_factory=list)
+    n: int = 0
+    mean: float | None = None
+    std: float | None = None
+    warnings: list[str] = Field(default_factory=list)
+    caption: ChartCaption = Field(default_factory=ChartCaption)
+
+
+class BoxplotStats(BaseModel):
+    column: str
+    n: int = 0
+    min: float | None = None
+    q1: float | None = None
+    median: float | None = None
+    q3: float | None = None
+    max: float | None = None
+    outlier_count: int = 0
+    outliers: list[float] = Field(default_factory=list)
+
+
+class BoxplotResponse(BaseModel):
+    columns: list[str] = Field(default_factory=list)
+    series: list[BoxplotStats] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    caption: ChartCaption = Field(default_factory=ChartCaption)
+
+
+class CategoryBarItem(BaseModel):
+    label: str
+    count: int
+    share: float
+
+
+class CategoryBarResponse(BaseModel):
+    column: str
+    items: list[CategoryBarItem] = Field(default_factory=list)
+    n: int = 0
+    unique: int = 0
     warnings: list[str] = Field(default_factory=list)
     caption: ChartCaption = Field(default_factory=ChartCaption)

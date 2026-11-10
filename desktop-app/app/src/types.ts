@@ -189,10 +189,17 @@ export interface ChatContext {
   model_results?: ModelRunResults | null;
 }
 
+export interface ChatActionPayload {
+  type: string;
+  value?: string | number | string[] | null;
+  step?: number | null;
+}
+
 export interface ChatResponse {
   reply: string;
   provider: Provider;
   maas_error?: string | null;
+  actions?: ChatActionPayload[];
 }
 
 export interface ReportResponse {
@@ -231,6 +238,8 @@ export interface VariableDictInferRequest {
   dataset_hash?: string;
   columns: ProfileColumn[] | ColumnInfo[];
   existing?: VariableDictionary | null;
+  /** 为 false 时不从磁盘读旧字典，避免空确认锁死自动填充 */
+  reuse_stored?: boolean;
   llm_config?: LLMConfig | null;
 }
 
@@ -398,6 +407,56 @@ export interface CorrHeatmapResponse {
   columns: string[];
   matrix: (number | null)[][];
   n_matrix: number[][];
+  warnings: string[];
+  caption: ChartCaption;
+}
+
+export interface HistogramBin {
+  left: number;
+  right: number;
+  count: number;
+}
+
+export interface HistogramResponse {
+  column: string;
+  bins: HistogramBin[];
+  n: number;
+  mean: number | null;
+  std: number | null;
+  warnings: string[];
+  caption: ChartCaption;
+}
+
+export interface BoxplotStats {
+  column: string;
+  n: number;
+  min: number | null;
+  q1: number | null;
+  median: number | null;
+  q3: number | null;
+  max: number | null;
+  outlier_count: number;
+  outliers: number[];
+}
+
+export interface BoxplotResponse {
+  columns: string[];
+  series: BoxplotStats[];
+  warnings: string[];
+  caption: ChartCaption;
+}
+
+export interface CategoryBarItem {
+  label: string;
+  count: number;
+  share: number;
+}
+
+export interface CategoryBarResponse {
+  column: string;
+  items: CategoryBarItem[];
+  n: number;
+  unique: number;
   warnings: string[];
   caption: ChartCaption;
 }

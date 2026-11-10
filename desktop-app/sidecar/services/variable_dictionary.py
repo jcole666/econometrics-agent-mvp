@@ -76,11 +76,50 @@ def _guess_unit(name: str) -> str | None:
     return None
 
 
+_DESCRIPTION_HINTS: tuple[tuple[str, str], ...] = (
+    ("创新指数", "衡量城市或地区创新水平的综合指标，数值越高通常表示创新活动越活跃。"),
+    ("数字经济发展指数", "衡量数字经济发展水平的综合指数。"),
+    ("宽带接入率", "宽带接入覆盖或普及程度，通常以百分比表示。"),
+    ("财政科技支出", "政府财政中用于科技活动的支出规模。"),
+    ("人力资本", "反映劳动力受教育程度或技能水平的代理变量。"),
+    ("产业结构升级", "反映产业结构高级化或升级程度的指标。"),
+    ("人口密度", "单位面积上的人口数量。"),
+    ("智慧城市试点", "是否入选智慧城市试点的政策处理变量，常见为 0/1。"),
+    ("绿色专利占比", "绿色相关专利在全部专利中的比重。"),
+    ("城市", "观测单位所属城市名称。"),
+    ("省份", "观测单位所属省份。"),
+    ("区域", "地理或行政区域划分。"),
+    ("年份", "观测所属年份，常作为时间维度。"),
+)
+
+
+def _guess_description(name: str, kind: str) -> str | None:
+    for key, text in _DESCRIPTION_HINTS:
+        if key in name:
+            return text
+    if "指数" in name:
+        return f"「{name}」是综合指数类指标，数值高低反映相对水平。"
+    if "率" in name or "%" in name or "占比" in name:
+        return f"「{name}」通常表示比例或比率，解读时注意量纲。"
+    if "试点" in name or "是否" in name or kind == "二元/布尔":
+        return f"「{name}」多为分类或处理变量，常用于识别政策冲击。"
+    if "年份" in name or "年度" in name or kind == "时间":
+        return f"「{name}」标识时间维度，面板分析中常用作时间列。"
+    if kind == "数值":
+        return f"「{name}」为数值型变量，建模前需确认缺失与异常值。"
+    if kind.startswith("分类"):
+        return f"「{name}」为分类变量，回归中常需编码或作为固定效应。"
+    if _CJK.search(name):
+        return f"「{name}」字段，请核对其在研究问题中的具体含义。"
+    return f"列「{name}」的含义待核对；可结合样例值与研究问题补充说明。"
+
+
 def _rule_entry(column: dict) -> VariableDictEntry:
     name = str(column["name"])
+    kind = str(column.get("kind") or "")
     if _CJK.search(name):
         label: str | None = name
-        confidence = 0.9
+        confidence = 0.72
     elif _CODE_NAME.match(name):
         label = None
         confidence = 0.2
@@ -88,10 +127,12 @@ def _rule_entry(column: dict) -> VariableDictEntry:
         label = name
         confidence = 0.45
 
+    description = _guess_description(name, kind)
+
     return VariableDictEntry(
         column=name,
         label=label,
-        description=None,
+        description=description,
         type=_semantic_type(column),
         unit=_guess_unit(name),
         value_labels={},
@@ -102,19 +143,27 @@ def _rule_entry(column: dict) -> VariableDictEntry:
     )
 
 
+def _has_description(entry: VariableDictEntry | None) -> bool:
+    return bool(entry and (entry.description or "").strip())
+
+
+def _is_locked(entry: VariableDictEntry | None) -> bool:
+    """只有「已确认且已有含义」才锁定，避免空确认永久挡住自动填充。"""
+    return bool(entry and entry.confirmed and _has_description(entry))
+
+
 def infer_dictionary(request: VariableDictInferRequest) -> VariableDictInferResponse:
     columns = [item for item in request.columns if isinstance(item, dict) and item.get("name")]
     existing = request.existing
-    if existing is None and request.dataset_id:
+    if existing is None and request.reuse_stored and request.dataset_id:
         existing = project_store.read_variable_dictionary(request.dataset_id, request.dataset_hash or None)
 
     entries: dict[str, VariableDictEntry] = {}
     for column in columns:
         name = str(column["name"])
         prior = (existing.entries.get(name) if existing else None)
-        if prior is not None and prior.confirmed:
-            # 用户确认过的条目不再被推断覆盖。
-            entries[name] = prior
+        if _is_locked(prior):
+            entries[name] = prior  # type: ignore[assignment]
             continue
         rule = _rule_entry(column)
         if prior is not None:
@@ -124,6 +173,7 @@ def infer_dictionary(request: VariableDictInferRequest) -> VariableDictInferResp
                     "description": prior.description or rule.description,
                     "unit": prior.unit or rule.unit,
                     "value_labels": prior.value_labels or rule.value_labels,
+                    "confirmed": False if not _has_description(prior) else prior.confirmed,
                     "source": "ai",
                 }
             )
@@ -139,11 +189,13 @@ def infer_dictionary(request: VariableDictInferRequest) -> VariableDictInferResp
         except MaasUnavailable as exc:
             maas_error = str(exc)
 
+    # 内容变了就抬版本号，前端草稿才能跟着刷新（不能只靠 version 不变时的旧 draft）
+    base_version = existing.version if existing else 0
     dictionary = VariableDictionary(
         dataset_id=request.dataset_id,
         dataset_hash=request.dataset_hash,
         entries=entries,
-        version=existing.version if existing else 1,
+        version=max(1, base_version + 1),
     )
     return VariableDictInferResponse(dictionary=dictionary, provider=provider, maas_error=maas_error)
 
@@ -168,10 +220,12 @@ def _llm_entries(request: VariableDictInferRequest, columns: list[dict]) -> list
         {
             "role": "system",
             "content": (
-                "你是计量经济学助教。请为数据列补充中文语义元数据，只返回 JSON："
-                '{"entries":[{"column":"原始列名","label":"中文名称","description":"含义","type":"numeric|category|binary|datetime|text|unknown",'
+                "你是计量经济学助教。必须为每一列写出可直接给用户核对的中文释义，只返回 JSON："
+                '{"entries":[{"column":"原始列名","label":"中文名称","description":"一句话含义","type":"numeric|category|binary|datetime|text|unknown",'
                 '"unit":"单位或null","value_labels":{"1":"含义"},"confidence":0到1}]}。'
-                "column 必须是给定列名之一；无法确定时 label 用 null，不要编造单位；不要改动任何数值。"
+                "硬性要求：每个给定 column 都必须出现；description 不能为空，写清楚这列在研究里代表什么；"
+                "若列名已是中文，label 可与列名相同，但仍要写 description；二元变量尽量补 value_labels；"
+                "不要编造单位；不要改动任何数值。"
             ),
         },
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -186,30 +240,36 @@ def _merge_llm_entries(entries: dict[str, VariableDictEntry], llm_entries: list[
     for item in llm_entries:
         name = str(item.get("column") or "").strip()
         entry = merged.get(name)
-        if entry is None or entry.confirmed:
+        if entry is None or _is_locked(entry):
             continue
 
         update: dict[str, Any] = {}
         label = item.get("label")
-        if isinstance(label, str) and label.strip():
+        if isinstance(label, str) and label.strip() and not (entry.label or "").strip():
+            update["label"] = label.strip()[:60]
+        elif isinstance(label, str) and label.strip() and not entry.confirmed:
             update["label"] = label.strip()[:60]
         description = item.get("description")
         if isinstance(description, str) and description.strip():
-            update["description"] = description.strip()[:200]
+            if not _has_description(entry) or not entry.confirmed:
+                update["description"] = description.strip()[:200]
         semantic_type = str(item.get("type") or "")
-        if semantic_type in SEMANTIC_TYPES:
+        if semantic_type in SEMANTIC_TYPES and (not entry.confirmed or entry.type == "unknown"):
             update["type"] = semantic_type
         unit = item.get("unit")
-        if isinstance(unit, str) and unit.strip():
+        if isinstance(unit, str) and unit.strip() and (not entry.unit or not entry.confirmed):
             update["unit"] = unit.strip()[:20]
         value_labels = item.get("value_labels")
-        if isinstance(value_labels, dict) and value_labels:
+        if isinstance(value_labels, dict) and value_labels and (not entry.value_labels or not entry.confirmed):
             update["value_labels"] = {str(key): str(value)[:40] for key, value in list(value_labels.items())[:20]}
         confidence = item.get("confidence")
         if isinstance(confidence, (int, float)) and 0 <= float(confidence) <= 1:
             update["confidence"] = round(float(confidence), 3)
 
         if update:
+            # 补全空含义后需用户再确认
+            if entry.confirmed and "description" in update:
+                update["confirmed"] = False
             update["updated_at"] = _now_iso()
             merged[name] = entry.model_copy(update=update)
     return merged

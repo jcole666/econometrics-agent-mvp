@@ -17,24 +17,42 @@ def _env_file() -> Path | None:
     return resolve_env_file()
 
 
+# 默认示例仍用华为 ModelArts DeepSeek；用户可在设置里换成任意 OpenAI 兼容接口。
 DEFAULT_BASE_URL = "https://api.modelarts-maas.com/openai/v1"
-DEFAULT_MODEL = "deepseek-v4-pro-IckBJP"
+DEFAULT_MODEL = "deepseek-v4-pro"
+MODELARTS_MODELS = frozenset({"deepseek-v4-pro", "deepseek-flash"})
+DEEPSEEK_OFFICIAL_MODELS = frozenset({"deepseek-chat", "deepseek-reasoner"})
 SUPPORTED_MODELS = {"OLS", "Logit", "Panel Fixed Effects", "DID", "IV-2SLS", "RDD"}
 
-# 自定义模型地址白名单：服务端会带着用户的 API Key 请求这个地址，
-# 因此只允许已知的托管服务域名，避免前端把 Key 转发到任意主机。
+# 常见厂商仅作文档/健康检查参考；真正校验不再强制白名单，
+# 任何 OpenAI 兼容的 https 地址都可以由用户自行填写。
 DEFAULT_ALLOWED_HOSTS = frozenset(
     {
+        "api.deepseek.com",
         "api.modelarts-maas.com",
         "api.openai.com",
-        "api.deepseek.com",
         "dashscope.aliyuncs.com",
         "api.moonshot.cn",
         "open.bigmodel.cn",
         "ark.cn-beijing.volces.com",
+        "api.anthropic.com",
+        "generativelanguage.googleapis.com",
+        "api.siliconflow.cn",
+        "api.lingyiwanwu.com",
+        "api.minimax.chat",
+        "openrouter.ai",
     }
 )
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+# 仍拦截云元数据等明显 SSRF 目标；其余 https 公网/校园域名放行。
+BLOCKED_HOSTS = frozenset(
+    {
+        "169.254.169.254",
+        "metadata.google.internal",
+        "metadata.goog",
+        "instance-data",
+    }
+)
 
 
 class MaasUnavailable(RuntimeError):
@@ -149,9 +167,12 @@ def is_base_url_allowed(base_url: str) -> bool:
 def _validate_base_url(base_url: str | None) -> str:
     """校验模型服务地址，返回去掉尾部斜杠的地址。
 
-    规则：仅允许 https；本机回环允许 http（便于接本地推理服务）；
-    非回环域名必须在白名单内，且地址不得携带账号密码。
-    校验失败抛 MaasUnavailable，由上层降级到本地规则。
+    规则：
+    - 必须是 http/https，且不得携带账号密码；
+    - 本机回环允许 http（Ollama 等本地服务）；
+    - 其他地址必须 https；
+    - 任意 OpenAI 兼容域名都可用，不再强制厂商白名单；
+    - 仅拦截云元数据等明确危险主机。
     """
     raw = (base_url or "").strip()
     if not raw:
@@ -168,8 +189,14 @@ def _validate_base_url(base_url: str | None) -> str:
         raise MaasUnavailable("模型服务地址缺少域名，当前使用本地规则。")
     if parsed.scheme == "http" and host not in LOOPBACK_HOSTS:
         raise MaasUnavailable("模型服务地址必须使用 HTTPS（本机回环除外），当前使用本地规则。")
-    if host not in LOOPBACK_HOSTS and host not in _allowed_hosts():
-        raise MaasUnavailable(f"模型服务域名 {host} 不在白名单内，当前使用本地规则。")
+    if host in BLOCKED_HOSTS or host.endswith(".internal"):
+        raise MaasUnavailable(f"模型服务域名 {host} 不允许使用，当前使用本地规则。")
+
+    # 少数官方根地址漏写 /v1 时自动补上；自定义地址保持用户原样。
+    if host == "api.deepseek.com" and parsed.path in {"", "/"}:
+        return f"{parsed.scheme}://{host}/v1"
+    if host == "api.openai.com" and parsed.path in {"", "/"}:
+        return f"{parsed.scheme}://{host}/v1"
 
     return raw.rstrip("/")
 
@@ -179,7 +206,10 @@ def _get_custom_config(llm_config: LLMConfig | None) -> MaasConfig:
 
     base_url = _validate_base_url(llm_config.base_url or os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL))
     api_key = (llm_config.api_key or _get_api_key()).strip()
-    model = (llm_config.model or os.getenv("MAAS_MODEL", DEFAULT_MODEL)).strip()
+    model = _normalize_model_name(
+        (llm_config.model or os.getenv("MAAS_MODEL", DEFAULT_MODEL)).strip(),
+        base_url,
+    )
 
     if not api_key:
         raise MaasUnavailable("自定义模型缺少 API Key，当前使用本地规则。")
@@ -187,6 +217,33 @@ def _get_custom_config(llm_config: LLMConfig | None) -> MaasConfig:
         raise MaasUnavailable("自定义模型缺少模型名称，当前使用本地规则。")
 
     return MaasConfig(api_key=api_key, base_url=base_url, model=model, timeout=llm_config.timeout or _get_timeout())
+
+
+def _normalize_model_name(model: str, base_url: str) -> str:
+    """只纠正已知网关的常见填错；自定义厂商的模型名原样保留。"""
+    host = (urlparse(base_url).hostname or "").lower()
+    name = (model or "").strip()
+    if not name:
+        return DEFAULT_MODEL
+
+    if host.endswith("modelarts-maas.com"):
+        if name in MODELARTS_MODELS:
+            return name
+        # 仅纠正明确会 400 的别名，不改用户自定义部署名。
+        lowered = name.lower()
+        if lowered in {"deepseek", "deepseek-chat", "deepseek-reasoner", "deepseek-v4-pro-ickbjp"}:
+            return "deepseek-v4-pro"
+        return name
+
+    if host == "api.deepseek.com":
+        if name in DEEPSEEK_OFFICIAL_MODELS:
+            return name
+        if name.lower() in {"deepseek", "deepseek-v4-pro", "deepseek-flash"}:
+            return "deepseek-chat"
+        return name
+
+    # OpenAI / 通义 / 智谱 / 月之暗面 / 学校私有网关：完全尊重用户填写。
+    return name
 
 
 def _load_local_env() -> None:
@@ -256,11 +313,14 @@ def _chat_completion(config: MaasConfig, messages: list[dict[str, str]]) -> str:
         with urlrequest.urlopen(req, timeout=config.timeout) as resp:
             response_body = resp.read().decode("utf-8")
     except error.HTTPError as exc:
-        raise MaasUnavailable(f"MaaS 请求失败（HTTP {exc.code}），当前使用本地规则。") from exc
+        detail = _http_error_detail(exc)
+        raise MaasUnavailable(f"模型请求失败（HTTP {exc.code}）{detail}。请核对请求地址、模型名称和 API Key。") from exc
     except error.URLError as exc:
-        raise MaasUnavailable("MaaS 网络请求失败，当前使用本地规则。") from exc
+        reason = getattr(exc, "reason", None)
+        hint = f"：{reason}" if reason else ""
+        raise MaasUnavailable(f"模型网络请求失败{hint}。请检查网络，以及请求地址是否为 https://api.deepseek.com/v1。") from exc
     except TimeoutError as exc:
-        raise MaasUnavailable("MaaS 请求超时，当前使用本地规则。") from exc
+        raise MaasUnavailable("模型请求超时，可在设置里把超时秒数调大后再试。") from exc
 
     try:
         data = json.loads(response_body)
@@ -297,6 +357,18 @@ def _parse_json_content(content: str) -> dict[str, Any]:
 def parse_json_content(content: str) -> dict[str, Any]:
     """公开版本：供变量字典、模型解读等模块复用同一套 JSON 提取逻辑。"""
     return _parse_json_content(content)
+
+
+def _http_error_detail(exc: error.HTTPError) -> str:
+    try:
+        body = exc.read().decode("utf-8", errors="replace").strip()
+    except Exception:
+        body = ""
+    if not body:
+        return ""
+    # 截断，避免把超长 HTML/JSON 整段塞进前端状态条。
+    snippet = body.replace("\n", " ")[:180]
+    return f"：{snippet}"
 
 
 def _normalize_recommendation(raw: dict[str, Any], fallback: dict[str, Any], request: ModelRequest) -> MaasRecommendation:

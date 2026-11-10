@@ -12,6 +12,9 @@ uploads/
 outputs/
 docs/superpowers/
 /小计.exe
+/小计-*.exe
+sidecar-build-prev-*/
+sidecar-dist-prev-*/
 *.lnk
 release/
 sidecar-build/

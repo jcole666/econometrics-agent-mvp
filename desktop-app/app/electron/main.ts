@@ -8,6 +8,7 @@ import {
   hasPackagedSidecar,
   lastSidecarExitCode,
   localAccessToken,
+  reclaimSidecarPort,
   SIDECAR_PORT,
   startSidecar,
   stopSidecar,
@@ -673,29 +674,42 @@ if (!singleInstanceLock) {
       installIpcHandlers();
       installAppMenu();
 
+      // 先开窗口，再等本地服务；避免双击后长时间无窗口像卡死。
+      createWindow();
+      mainWindow?.setTitle(`${APP_TITLE} · 正在启动本地服务…`);
+      mainWindow?.webContents.once("did-finish-load", () => {
+        mainWindow?.webContents.send("sidecar-status", { ready: false, message: "正在启动本地分析服务…" });
+      });
+
       const packagedSidecar = hasPackagedSidecar();
       const alreadyRunning = await checkSidecarHealth(500);
 
+      // 打包版若端口上已有残留 sidecar，令牌对不上会导致「永远连不上」。
+      // 直接回收端口，由当前实例带着本机令牌重新拉起。
       if (packagedSidecar && alreadyRunning) {
-        await showStartupError(`端口 ${SIDECAR_PORT} 已被占用。请关闭正在运行的其他实例后再启动。`);
-        app.quit();
-        return;
+        reclaimSidecarPort();
+        await new Promise((resolve) => setTimeout(resolve, 400));
       }
 
-      if (!alreadyRunning) {
+      if (!(await checkSidecarHealth(300))) {
         startSidecar();
       }
 
-      const ready = alreadyRunning || (await waitForSidecar());
+      const ready = await waitForSidecar();
       if (!ready) {
         const exitCode = lastSidecarExitCode();
-        const exitNote = exitCode === null ? "" : `进程退出码：${exitCode}。`;
-        await showStartupError(`服务端口：${SIDECAR_PORT}。${exitNote}`);
+        const exitNote = exitCode === null ? "进程可能未成功拉起。" : `进程退出码：${exitCode}。`;
+        await showStartupError(
+          `本地分析服务启动超时（端口 ${SIDECAR_PORT}）。${exitNote}\n请关掉所有小计窗口后重试；若仍失败，把 %APPDATA%\\Econometrics Agent Workbench\\sidecar.log 发我。`
+        );
         app.quit();
         return;
       }
 
-      createWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setTitle(APP_TITLE);
+        mainWindow.webContents.send("sidecar-status", { ready: true, message: "本地分析服务已就绪" });
+      }
 
       app.on("activate", () => {
         if (BrowserWindow.getAllWindows().length === 0) {

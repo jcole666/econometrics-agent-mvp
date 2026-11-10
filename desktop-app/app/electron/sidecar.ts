@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
@@ -22,6 +22,7 @@ export function localAccessToken() {
 
 let sidecar: ChildProcess | null = null;
 let exitCode: number | null = null;
+let logStream: fs.WriteStream | null = null;
 
 function projectRoot() {
   return path.resolve(__dirname, "..", "..", "..");
@@ -57,6 +58,41 @@ export function lastSidecarExitCode() {
   return exitCode;
 }
 
+function sidecarLogPath() {
+  try {
+    return path.join(app.getPath("userData"), "sidecar.log");
+  } catch {
+    return path.join(process.cwd(), "sidecar.log");
+  }
+}
+
+/** 清掉占用 8768 的残留进程（上次崩溃留下的 sidecar），再由当前实例带着令牌重新拉起。 */
+export function reclaimSidecarPort() {
+  if (process.platform !== "win32") return;
+  try {
+    const out = execFileSync("cmd.exe", ["/c", `netstat -ano | findstr :${SIDECAR_PORT}`], {
+      encoding: "utf8",
+      windowsHide: true
+    });
+    const pids = new Set<string>();
+    for (const line of out.split(/\r?\n/)) {
+      if (!/LISTENING/i.test(line)) continue;
+      const parts = line.trim().split(/\s+/);
+      const pid = parts[parts.length - 1];
+      if (pid && /^\d+$/.test(pid) && pid !== String(process.pid)) pids.add(pid);
+    }
+    for (const pid of pids) {
+      try {
+        execFileSync("taskkill.exe", ["/PID", pid, "/F", "/T"], { stdio: "ignore", windowsHide: true });
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // 没有监听进程时 findstr 非 0，忽略
+  }
+}
+
 export function startSidecar() {
   const root = projectRoot();
   const usePackagedSidecar = hasPackagedSidecar();
@@ -68,17 +104,59 @@ export function startSidecar() {
     throw new Error(`找不到本地分析服务程序：${command}`);
   }
 
+  if (logStream) {
+    try {
+      logStream.end();
+    } catch {
+      // ignore
+    }
+    logStream = null;
+  }
+
+  const captureLogs = app.isPackaged;
+  if (captureLogs) {
+    try {
+      logStream = fs.createWriteStream(sidecarLogPath(), { flags: "a" });
+      logStream.write(`\n---- sidecar start ${new Date().toISOString()} ----\n${command} ${args.join(" ")}\n`);
+    } catch {
+      logStream = null;
+    }
+  }
+
   sidecar = spawn(command, args, {
     cwd,
     env: { ...process.env, PYTHONUNBUFFERED: "1", [LOCAL_TOKEN_ENV]: LOCAL_TOKEN },
-    stdio: app.isPackaged ? "ignore" : "inherit",
+    stdio: captureLogs && logStream ? ["ignore", "pipe", "pipe"] : app.isPackaged ? "ignore" : "inherit",
     windowsHide: true
   });
+
+  if (logStream) {
+    sidecar.stdout?.on("data", (chunk) => logStream?.write(chunk));
+    sidecar.stderr?.on("data", (chunk) => logStream?.write(chunk));
+  }
 
   exitCode = null;
   sidecar.on("exit", (code) => {
     exitCode = code;
     sidecar = null;
+    if (logStream) {
+      try {
+        logStream.write(`---- sidecar exit code=${code} ${new Date().toISOString()} ----\n`);
+        logStream.end();
+      } catch {
+        // ignore
+      }
+      logStream = null;
+    }
+  });
+  sidecar.on("error", (error) => {
+    if (logStream) {
+      try {
+        logStream.write(`---- sidecar spawn error: ${error.message} ----\n`);
+      } catch {
+        // ignore
+      }
+    }
   });
 }
 
@@ -125,7 +203,7 @@ export function checkSidecarHealth(timeoutMs = 1000) {
   });
 }
 
-export function waitForSidecar(timeoutMs = 60000) {
+export function waitForSidecar(timeoutMs = 120000) {
   const startedAt = Date.now();
 
   return new Promise<boolean>((resolve) => {

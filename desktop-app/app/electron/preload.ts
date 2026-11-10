@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld("workbench", {
     ipcRenderer.on("data-file-selected", listener);
     return () => ipcRenderer.removeListener("data-file-selected", listener);
   },
+  onSidecarStatus: (callback: (payload: { ready: boolean; message: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { ready: boolean; message: string }) => callback(payload);
+    ipcRenderer.on("sidecar-status", listener);
+    return () => ipcRenderer.removeListener("sidecar-status", listener);
+  },
   saveTextFile: (payload: { fileName: string; content: string }) => {
     return ipcRenderer.invoke("save-text-file", payload);
   },

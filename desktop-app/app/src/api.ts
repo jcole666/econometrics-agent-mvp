@@ -9,8 +9,11 @@ import type {
   ModelRecommendation,
   ModelRequest,
   ReportResponse,
+  BoxplotResponse,
+  CategoryBarResponse,
   CorrHeatmapResponse,
   ExplainModelRequest,
+  HistogramResponse,
   ModelExplanation,
   ModelRunCompareResponse,
   ModelRunCreateRequest,
@@ -29,13 +32,17 @@ import type {
 
 const BASE_URL = (import.meta.env.VITE_SIDECAR_URL as string | undefined) ?? "http://127.0.0.1:8768";
 
-/** 桌面应用启动 sidecar 时会注入本机令牌；浏览器里调试时该值为空，后端也就不校验。 */
-const LOCAL_TOKEN = typeof window === "undefined" ? "" : window.workbench?.localToken ?? "";
+/** 每次请求现取令牌，避免模块加载早于 preload 时把空字符串锁死。 */
+function localToken() {
+  if (typeof window === "undefined") return "";
+  return window.workbench?.localToken ?? "";
+}
 
 function withToken(init?: RequestInit): RequestInit {
   const headers = new Headers(init?.headers);
-  if (LOCAL_TOKEN) {
-    headers.set("X-Xiaoji-Token", LOCAL_TOKEN);
+  const token = localToken();
+  if (token) {
+    headers.set("X-Xiaoji-Token", token);
   }
   return { ...init, headers };
 }
@@ -207,6 +214,29 @@ export async function fetchCorrHeatmap(file: File, columns: string[]): Promise<C
   form.append("file", file);
   form.append("columns", columns.join(","));
   return requestJson("/relationship/corr-heatmap", { method: "POST", body: form });
+}
+
+export async function fetchHistogram(file: File, column: string, bins = 12): Promise<HistogramResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("column", column);
+  form.append("bins", String(bins));
+  return requestJson("/relationship/histogram", { method: "POST", body: form });
+}
+
+export async function fetchBoxplot(file: File, columns: string[]): Promise<BoxplotResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("columns", columns.join(","));
+  return requestJson("/relationship/boxplot", { method: "POST", body: form });
+}
+
+export async function fetchCategoryBar(file: File, column: string, topN = 10): Promise<CategoryBarResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("column", column);
+  form.append("top_n", String(topN));
+  return requestJson("/relationship/category-bar", { method: "POST", body: form });
 }
 
 export async function explainModel(payload: ExplainModelRequest): Promise<ModelExplanation> {
